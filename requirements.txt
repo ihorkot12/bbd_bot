@@ -1,9 +1,18 @@
-# Секрети — НІКОЛИ не комітити
+# Secrets — never commit
 credentials.json
+.env
+.env.*
+!.env.example
+
+# Runtime files
 bot.log
 bot.pid
+*.log
+logs/
+
+# Local data / exports
 *.json
-!.env.example
+*.csv
 
 # Python
 __pycache__/
@@ -12,33 +21,29 @@ __pycache__/
 *.pyd
 .Python
 *.egg-info/
-dist/
-build/
 *.egg
 .eggs/
+build/
+dist/
 
-# Тести та покриття
+# Tests & coverage
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 
-# Virtualenv
+# Virtual environments
 venv/
 .venv/
 env/
 ENV/
 
-# IDE
+# IDE / editors
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Логи
-*.log
-logs/
-
-# OS
+# OS files
 .DS_Store
 Thumbs.db
