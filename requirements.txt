@@ -1,49 +1,10 @@
-# Secrets — never commit
-credentials.json
-.env
-.env.*
-!.env.example
-
-# Runtime files
-bot.log
-bot.pid
-*.log
-logs/
-
-# Local data / exports
-*.json
-*.csv
-
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-*.egg
-.eggs/
-build/
-dist/
-
-# Tests & coverage
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# Virtual environments
-venv/
-.venv/
-env/
-ENV/
-
-# IDE / editors
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS files
-.DS_Store
-Thumbs.db
+pyTelegramBotAPI==4.22.0
+gspread==6.1.2
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0
+google-api-python-client==2.127.0
+APScheduler==3.10.4
+python-dotenv==1.0.1
+pytz==2024.1
+pytest==8.2.0
+pytest-cov==5.0.0
