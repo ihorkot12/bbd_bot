@@ -1,0 +1,1 @@
+worker: python -c "import os, pathlib, zipfile; zipfile.ZipFile('black-bear-dojo-bot-v2.zip').extractall('.'); p=os.getenv('GOOGLE_CREDENTIALS_JSON'); pathlib.Path('black-bear-dojo-bot-v2/credentials.json').write_text(p, encoding='utf-8') if p else None" && cd black-bear-dojo-bot-v2 && python -m app.main
