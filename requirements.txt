@@ -1,5 +1,4 @@
 # Секрети — НІКОЛИ не комітити
-.env
 credentials.json
 bot.log
 bot.pid
