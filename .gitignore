@@ -1,0 +1,45 @@
+# Secrets — NEVER commit
+credentials.json
+bot.log
+bot.pid
+*.json
+!.env.example
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# Tests & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Virtualenv
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
