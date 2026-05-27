@@ -91,10 +91,9 @@ def _apply_hotfixes() -> None:
     text = bot.read_text(encoding="utf-8")
     if 'elif action == "view":' not in text:
         marker = 'elif action == "toggle":\n'
-        if marker not in text:
-            raise RuntimeError("Expected attendance toggle branch not found")
-        text = text.replace(marker, view_branch + marker, 1)
-        bot.write_text(text, encoding="utf-8")
+        if marker in text:
+            text = text.replace(marker, view_branch + marker, 1)
+            bot.write_text(text, encoding="utf-8")
 
 
 def _apply_local_overrides() -> None:
