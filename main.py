@@ -7,6 +7,7 @@ applies the small production hotfixes, then runs app.main.
 from __future__ import annotations
 
 import runpy
+import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -15,6 +16,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 ZIP_PATH = ROOT / "black-bear-dojo-bot-v2.zip"
 APP_ROOT = ROOT / ".runtime_app" / "black-bear-dojo-bot-v2"
+LOCAL_APP_OVERRIDE = ROOT / "app"
+
+
+def _replace_once(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if new in text:
+        return
+    if old not in text:
+        raise RuntimeError(f"Expected patch target not found in {path}")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
 def _ensure_runtime_app() -> None:
@@ -86,9 +97,27 @@ def _apply_hotfixes() -> None:
         bot.write_text(text, encoding="utf-8")
 
 
+def _apply_local_overrides() -> None:
+    """
+    If repository has local app/*.py files, overlay them on extracted runtime app.
+    This lets us ship incremental improvements without rebuilding the zip archive.
+    """
+    if not LOCAL_APP_OVERRIDE.exists():
+        return
+    runtime_app_dir = APP_ROOT / "app"
+    for src in LOCAL_APP_OVERRIDE.rglob("*.py"):
+        if "__pycache__" in src.parts:
+            continue
+        rel = src.relative_to(LOCAL_APP_OVERRIDE)
+        dst = runtime_app_dir / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+
 def main() -> None:
     _ensure_runtime_app()
     _apply_hotfixes()
+    _apply_local_overrides()
     sys.path.insert(0, str(APP_ROOT))
     runpy.run_module("app.main", run_name="__main__")
 
