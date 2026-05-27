@@ -185,10 +185,12 @@ def register_handlers(
             "Це розширена практична форма для клубу:\n"
             "• контакти\n"
             "• дата народження\n"
+            "• preferred канал зв'язку\n"
             "• налаштування привітань з ДН\n"
             "• медичні примітки\n"
+            "• аварійний контакт\n"
             "• згода на фото/відео\n\n"
-            "Крок 1/13. Введіть ПІБ учасника:",
+            "Крок 1/16. Введіть ПІБ учасника:",
             reply_markup=kb.wizard_cancel_keyboard(),
         )
 
@@ -1085,7 +1087,7 @@ def _handle_ops(bot, call, data, tg_id, wizard_state: dict, repos):
         bot.send_message(
             tg_id,
             "🧾 <b>Анкета реєстрації учасника</b>\n\n"
-            "Крок 1/13. Введіть ПІБ учасника:",
+            "Крок 1/16. Введіть ПІБ учасника:",
             reply_markup=kb.wizard_cancel_keyboard(),
         )
         return
@@ -1120,7 +1122,7 @@ def _handle_ops(bot, call, data, tg_id, wizard_state: dict, repos):
         state["data"]["participant_type"] = parts[2]
         state["step"] = "group_id"
         bot.answer_callback_query(call.id)
-        total_steps = "13" if state.get("flow") == "register_member" else "10"
+        total_steps = "16" if state.get("flow") == "register_member" else "10"
         bot.send_message(
             tg_id,
             f"Крок 4/{total_steps}. Введіть ID групи або напишіть <code>-</code>, якщо групи ще немає.\n\n"
@@ -1140,7 +1142,7 @@ def _handle_ops(bot, call, data, tg_id, wizard_state: dict, repos):
             bot.answer_callback_query(call.id)
             bot.send_message(
                 tg_id,
-                "Крок 11/13. Як підписати вітання в каналі?\n"
+                "Крок 12/16. Як підписати вітання в каналі?\n"
                 "Наприклад: <code>Марко</code>\n"
                 "Якщо залишити стандартне імʼя — введіть <code>-</code>.",
                 reply_markup=kb.wizard_cancel_keyboard(),
@@ -1156,7 +1158,13 @@ def _handle_ops(bot, call, data, tg_id, wizard_state: dict, repos):
             bot.answer_callback_query(call.id, "Сесія не знайдена", show_alert=True)
             return
         state["data"]["photo_video_consent"] = "так" if parts[2] == "yes" else "ні"
-        _finish_register_member_wizard(bot, tg_id, state, wizard_state, repos)
+        state["step"] = "coach_notes"
+        bot.send_message(
+            tg_id,
+            "Крок 16/16. Нотатка тренеру (цілі, характер, що важливо на перших заняттях).\n"
+            "Якщо поки немає — введіть <code>-</code>:",
+            reply_markup=kb.wizard_cancel_keyboard(),
+        )
         bot.answer_callback_query(call.id)
         return
 
@@ -1222,59 +1230,94 @@ def _handle_wizard_text(bot, message, wizard_state: dict, repos):
         if step == "full_name":
             data["full_name"] = text
             state["step"] = "birth_date"
-            total_steps = "13" if flow == "register_member" else "10"
+            total_steps = "16" if flow == "register_member" else "10"
             bot.reply_to(message, f"Крок 2/{total_steps}. Введіть дату народження у форматі <code>ДД.ММ.РРРР</code>:")
         elif step == "birth_date":
-            data["birth_date"] = _parse_date_flexible(text)
+            parsed_birth_date = _parse_date_flexible(text)
+            if flow == "register_member" and not parsed_birth_date:
+                bot.reply_to(message, "⚠️ Не зміг розпізнати дату. Введіть у форматі <code>ДД.ММ.РРРР</code>, наприклад <code>14.09.2015</code>.")
+                return
+            data["birth_date"] = parsed_birth_date
             state["step"] = "participant_type"
-            total_steps = "13" if flow == "register_member" else "10"
+            total_steps = "16" if flow == "register_member" else "10"
             bot.reply_to(message, f"Крок 3/{total_steps}. Це дитина чи дорослий?", reply_markup=kb.participant_type_keyboard())
         elif step == "group_id":
             data["group_id"] = "" if text == "-" else text
             state["step"] = "parent_name"
-            total_steps = "13" if flow == "register_member" else "10"
+            total_steps = "16" if flow == "register_member" else "10"
             bot.reply_to(message, f"Крок 5/{total_steps}. Введіть ПІБ батька/контактної особи або <code>-</code>:")
         elif step == "parent_name":
             data["parent_name"] = "" if text == "-" else text
             state["step"] = "phone"
-            total_steps = "13" if flow == "register_member" else "10"
+            total_steps = "16" if flow == "register_member" else "10"
             bot.reply_to(message, f"Крок 6/{total_steps}. Введіть телефон:")
         elif step == "phone":
+            if flow == "register_member":
+                normalized_digits = "".join(ch for ch in text if ch.isdigit())
+                if len(normalized_digits) < 10:
+                    bot.reply_to(message, "⚠️ Додайте коректний телефон (мінімум 10 цифр), наприклад <code>+380671234567</code>.")
+                    return
             data["phone"] = text
             state["step"] = "email"
-            total_steps = "13" if flow == "register_member" else "10"
+            total_steps = "16" if flow == "register_member" else "10"
             bot.reply_to(message, f"Крок 7/{total_steps}. Введіть email або <code>-</code>:")
         elif step == "email":
+            if flow == "register_member" and text != "-" and "@" not in text:
+                bot.reply_to(message, "⚠️ Email виглядає некоректно. Введіть email або <code>-</code>.")
+                return
             data["email"] = "" if text == "-" else text
             state["step"] = "telegram_username"
-            total_steps = "13" if flow == "register_member" else "10"
+            total_steps = "16" if flow == "register_member" else "10"
             bot.reply_to(message, f"Крок 8/{total_steps}. Введіть Telegram username батька/учасника або <code>-</code>:")
         elif step == "telegram_username":
             data["telegram_username"] = "" if text == "-" else text
             state["step"] = "viber"
-            total_steps = "13" if flow == "register_member" else "10"
+            total_steps = "16" if flow == "register_member" else "10"
             bot.reply_to(message, f"Крок 9/{total_steps}. Введіть Viber/номер або <code>-</code>:")
         elif step == "viber":
             data["viber"] = "" if text == "-" else text
+            if flow == "register_member":
+                state["step"] = "preferred_contact_channel"
+                bot.reply_to(
+                    message,
+                    "Крок 10/16. Який основний канал зв'язку обрати?\n"
+                    "Приклад: <code>telegram</code>, <code>viber</code>, <code>phone</code> або <code>email</code>.",
+                )
+            else:
+                state["step"] = "birthday_greeting"
+                bot.reply_to(message, "Крок 10/10. Вітати з днем народження в каналі батьків?", reply_markup=kb.yes_no_keyboard("ops:birthday"))
+        elif step == "preferred_contact_channel" and flow == "register_member":
+            data["preferred_contact_channel"] = text.lower()
             state["step"] = "birthday_greeting"
-            total_steps = "13" if flow == "register_member" else "10"
-            bot.reply_to(message, f"Крок 10/{total_steps}. Вітати з днем народження в каналі батьків?", reply_markup=kb.yes_no_keyboard("ops:birthday"))
+            bot.reply_to(message, "Крок 11/16. Вітати з днем народження в каналі батьків?", reply_markup=kb.yes_no_keyboard("ops:birthday"))
         elif step == "birthday_public_name" and flow == "register_member":
             data["birthday_public_name"] = "" if text == "-" else text
             state["step"] = "medical_notes"
             bot.reply_to(
                 message,
-                "Крок 12/13. Медичні примітки або важливі обмеження.\n"
+                "Крок 13/16. Медичні примітки або важливі обмеження.\n"
                 "Якщо немає — введіть <code>-</code>:",
             )
         elif step == "medical_notes" and flow == "register_member":
             data["medical_notes"] = "" if text == "-" else text
+            state["step"] = "emergency_contact"
+            bot.reply_to(
+                message,
+                "Крок 14/16. Екстрений контакт (ПІБ + телефон), наприклад:\n"
+                "<code>Іван Петренко, +380671234567</code>\n"
+                "Якщо немає — введіть <code>-</code>:",
+            )
+        elif step == "emergency_contact" and flow == "register_member":
+            data["emergency_contact"] = "" if text == "-" else text
             state["step"] = "photo_video_consent"
             bot.reply_to(
                 message,
-                "Крок 13/13. Є згода на фото/відео для внутрішніх публікацій клубу?",
+                "Крок 15/16. Є згода на фото/відео для внутрішніх публікацій клубу?",
                 reply_markup=kb.yes_no_keyboard("ops:regphoto"),
             )
+        elif step == "coach_notes" and flow == "register_member":
+            data["coach_notes"] = "" if text == "-" else text
+            _finish_register_member_wizard(bot, tg_id, state, wizard_state, repos)
         return
 
     if flow == "add_group":
@@ -1564,6 +1607,10 @@ def _finish_register_member_wizard(bot, tg_id: int, state: dict, wizard_state: d
     note_parts = []
     if data.get("medical_notes"):
         note_parts.append(f"Медичні примітки: {data['medical_notes']}")
+    if data.get("emergency_contact"):
+        note_parts.append(f"Екстрений контакт: {data['emergency_contact']}")
+    if data.get("coach_notes"):
+        note_parts.append(f"Нотатка тренеру: {data['coach_notes']}")
     if data.get("photo_video_consent"):
         note_parts.append(f"Фото/відео згода: {data['photo_video_consent']}")
     notes = " | ".join(note_parts) if note_parts else None
@@ -1578,7 +1625,7 @@ def _finish_register_member_wizard(bot, tg_id: int, state: dict, wizard_state: d
         parent_email=data.get("email") or None,
         parent_telegram_username=data.get("telegram_username") or None,
         parent_viber=data.get("viber") or None,
-        preferred_contact_channel="telegram/viber/phone",
+        preferred_contact_channel=(data.get("preferred_contact_channel") or "telegram/viber/phone"),
         group_id=data.get("group_id") or None,
         birthday_greeting_enabled=bool(data.get("birthday_greeting_enabled")),
         birthday_public_name=(data.get("birthday_public_name") or full_name.split()[0]).strip(),
@@ -1595,7 +1642,9 @@ def _finish_register_member_wizard(bot, tg_id: int, state: dict, wizard_state: d
         "✅ <b>Анкету збережено, учасника додано</b>\n\n"
         + _member_card(member)
         + "\n\n🎂 Нагадування про ДН увімкнено: "
-        + ("так" if member.birthday_greeting_enabled else "ні"),
+        + ("так" if member.birthday_greeting_enabled else "ні")
+        + "\n📞 Основний канал: "
+        + (member.preferred_contact_channel or "-"),
         reply_markup=kb.member_edit_keyboard(member.member_id),
     )
 
@@ -1673,7 +1722,9 @@ def _member_card(member: Member) -> str:
         f"Контакт: {member.parent_name or '-'} | {member.parent_phone or '-'}\n"
         f"Email: {member.parent_email or '-'}\n"
         f"Telegram/Viber: {member.parent_telegram_username or '-'} / {member.parent_viber or '-'}\n"
+        f"Основний канал: {member.preferred_contact_channel or '-'}\n"
         f"ДН у канал: {'так' if member.birthday_greeting_enabled else 'ні'}\n"
+        f"Нотатки: {member.notes or '-'}\n"
         f"Активний: {'так' if member.active else 'ні'}"
     )
 
@@ -1716,7 +1767,7 @@ def _owner_help_text() -> str:
         "/register — повна анкета учасника/батьків.\n"
         "/syncforms — вручну підтягнути нові заявки з Google Forms.\n\n"
         "<b>Учасники</b>\n"
-        "/registermember — розширена практична анкета учасника (13 кроків).\n"
+        "/registermember — розширена практична анкета учасника (16 кроків).\n"
         "Найзручніше: натисніть <b>➕ Додати</b> → <b>Додати учасника покроково</b>. "
         "Бот сам запитає ПІБ, дату народження, тип, групу й контакти.\n"
         "/members — список учасників з ID.\n"
