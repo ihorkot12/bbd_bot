@@ -108,6 +108,7 @@ def owner_operations_menu() -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton("🥋 Додати / редагувати групу покроково", callback_data="ops:add_group"),
         types.InlineKeyboardButton("👥 Редагувати учасників кнопками", callback_data="ops:edit_members"),
         types.InlineKeyboardButton("💰 Оновити оплату учасника", callback_data="ops:set_payment"),
+        types.InlineKeyboardButton("❄️ Заморозити абонемент (1 кнопка)", callback_data="ops:freeze_subscription"),
         types.InlineKeyboardButton("🧭 Інструкція власника", callback_data="menu:ownerhelp"),
         types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"),
     )

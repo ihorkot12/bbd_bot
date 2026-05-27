@@ -186,6 +186,7 @@ def main() -> None:
         attendance_deadline_time=cfg.attendance_deadline_time,
         coach_morning_card_time=cfg.coach_morning_card_time,
         attendance_pre_reminder_minutes=cfg.attendance_pre_reminder_minutes,
+        parent_absence_followup_time=cfg.parent_absence_followup_time,
         digest_time=cfg.digest_time,
         birthday_check_time=cfg.birthday_check_time,
     )

@@ -1105,6 +1105,22 @@ def _handle_ops(bot, call, data, tg_id, wizard_state: dict, repos):
         bot.send_message(tg_id, "💰 Оберіть учасника для оплати:", reply_markup=kb.member_list_keyboard(members, "ops:paymember"))
         return
 
+    if action == "freeze_subscription":
+        if not _is_owner_admin(tg_id):
+            bot.answer_callback_query(call.id, "⛔ Заморозка доступна тільки власнику або адміністратору", show_alert=True)
+            return
+        members = repos.members.get_active()
+        if not members:
+            bot.answer_callback_query(call.id, "Спочатку додайте учасників", show_alert=True)
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            tg_id,
+            "❄️ Оберіть учасника для заморозки абонемента на поточний період:",
+            reply_markup=kb.member_list_keyboard(members, "ops:freeze_member"),
+        )
+        return
+
     if action == "edit_members":
         members = repos.members.get_active()
         if not members:
@@ -1211,6 +1227,46 @@ def _handle_ops(bot, call, data, tg_id, wizard_state: dict, repos):
         wizard_state[tg_id] = state
         bot.answer_callback_query(call.id)
         bot.send_message(tg_id, "Крок 2/5. Введіть період оплати, наприклад <code>2026-05</code>:", reply_markup=kb.wizard_cancel_keyboard())
+        return
+
+    if action == "freeze_member" and len(parts) >= 3:
+        if not _is_owner_admin(tg_id):
+            bot.answer_callback_query(call.id, "⛔ Заморозка доступна тільки власнику або адміністратору", show_alert=True)
+            return
+        member_id = parts[2]
+        member = repos.members.get_by_id(member_id)
+        if not member:
+            bot.answer_callback_query(call.id, "Учасника не знайдено", show_alert=True)
+            return
+
+        period = datetime.now().strftime("%Y-%m")
+        member_payments = repos.payments.get_by_member(member_id)
+        payment = next((p for p in member_payments if p.period == period), None)
+        latest_due = max((p.amount_due for p in member_payments), default=0.0)
+        if not payment:
+            payment = Payment(
+                payment_id=str(uuid.uuid4())[:8],
+                member_id=member_id,
+                period=period,
+                status=PaymentStatus.FROZEN,
+                amount_due=latest_due,
+                amount_paid=0.0,
+            )
+        payment.status = PaymentStatus.FROZEN
+        payment.updated_at = datetime.now()
+        freeze_note = f"Заморожено через бота ({datetime.now().strftime('%d.%m.%Y')})"
+        payment.notes = f"{payment.notes} | {freeze_note}" if payment.notes else freeze_note
+        repos.payments.upsert(payment)
+
+        bot.answer_callback_query(call.id, "✅ Абонемент заморожено")
+        bot.send_message(
+            tg_id,
+            "❄️ <b>Абонемент заморожено</b>\n\n"
+            f"Учасник: <b>{member.full_name}</b>\n"
+            f"Період: <b>{period}</b>\n"
+            f"Статус: <b>frozen</b>",
+            reply_markup=kb.back_button("ops:menu"),
+        )
         return
 
     bot.answer_callback_query(call.id)
@@ -1785,6 +1841,7 @@ def _owner_help_text() -> str:
         "Щоранку тренер отримує картку з групами на день і кнопками для швидкої attendance.\n\n"
         "<b>Оплати</b>\n"
         "Найзручніше: <b>➕ Додати</b> → <b>Оновити оплату учасника</b>.\n"
+        "Для паузи: <b>➕ Додати</b> → <b>❄️ Заморозити абонемент (1 кнопка)</b>.\n"
         "Оновити оплату:\n"
         "<code>/setpayment member_id | 2026-05 | paid | 2500 | 2500 | mono</code>\n"
         "Статуси: <code>paid</code>, <code>partial</code>, <code>unpaid</code>, <code>promised</code>, <code>overdue</code>, <code>frozen</code>.\n\n"

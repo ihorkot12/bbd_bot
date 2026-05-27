@@ -60,6 +60,7 @@ class AttendanceService:
         self._lesson_prompt_sent: set[str] = set()
         self._pre_reminder_sent: set[str] = set()
         self._morning_card_sent: set[str] = set()
+        self._parent_absence_followup_sent: set[str] = set()
 
     # ── Нагадування тренерам ──────────────────────────────────────────────────
 
@@ -228,6 +229,61 @@ class AttendanceService:
             if ok:
                 self._morning_card_sent.add(dedupe_key)
                 sent += 1
+        return sent
+
+    def send_parent_absence_followups(
+        self,
+        now: Optional[datetime] = None,
+        min_absences: int = 2,
+        lookback_days: int = 21,
+    ) -> int:
+        """
+        Нагадування батькам тільки для тих, хто вже пропустив кілька занять.
+        Щоб не спамити, відправляємо не частіше ніж раз на тиждень для учасника.
+        """
+        now = now or datetime.now(ZoneInfo("Europe/Kyiv"))
+        today = now.date()
+        week_start = today - timedelta(days=today.weekday())
+        cutoff = today - timedelta(days=max(1, lookback_days))
+        sent = 0
+
+        for member in self._members.get_active():
+            if not member.parent_telegram_id:
+                continue
+            records = [
+                r for r in self._attendance.get_by_member(member.member_id)
+                if r.lesson_date >= cutoff
+            ]
+            absences = sum(1 for r in records if r.status == AttendanceStatus.ABSENT)
+            if absences < min_absences:
+                continue
+
+            dedupe_key = f"{member.member_id}:{week_start.isoformat()}"
+            if dedupe_key in self._parent_absence_followup_sent:
+                continue
+
+            group_name = "вашої групи"
+            if member.group_id:
+                group = self._groups.get_by_id(member.group_id)
+                if group and group.name:
+                    group_name = f"групи {group.name}"
+
+            text = (
+                f"👋 Доброго дня! Бачимо кілька пропусків у дитини "
+                f"<b>{member.full_name}</b> на заняттях {group_name}.\n\n"
+                "Якщо є пауза або зміни в графіку — дайте знати тренеру, "
+                "щоб ми коректно спланували тренування й підтримку."
+            )
+            ok = self._notifications.send(
+                member.parent_telegram_id,
+                text,
+                reminder_type=ReminderType.ATTENDANCE,
+                target_id=f"parent_absence:{member.member_id}:{week_start.isoformat()}",
+            )
+            if ok:
+                self._parent_absence_followup_sent.add(dedupe_key)
+                sent += 1
+
         return sent
 
     # ── Позначення відвідуваності ──────────────────────────────────────────────

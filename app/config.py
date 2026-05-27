@@ -136,6 +136,9 @@ class Config:
     attendance_pre_reminder_minutes: List[int] = field(
         default_factory=lambda: _get_int_list("ATTENDANCE_PRE_REMINDER_MINUTES", "60,30")
     )
+    parent_absence_followup_time: str = field(
+        default_factory=lambda: _get("PARENT_ABSENCE_FOLLOWUP_TIME", "13:00")
+    )
     digest_time: str = field(
         default_factory=lambda: _get("DIGEST_TIME", "08:00")
     )

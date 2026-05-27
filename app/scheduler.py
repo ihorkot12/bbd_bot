@@ -61,6 +61,7 @@ class BotScheduler:
         attendance_deadline_time: str = "22:00",
         coach_morning_card_time: str = "07:30",
         attendance_pre_reminder_minutes: list[int] | None = None,
+        parent_absence_followup_time: str = "13:00",
         digest_time: str = "08:00",
         birthday_check_time: str = "09:00",
     ) -> None:
@@ -76,6 +77,7 @@ class BotScheduler:
         self._att_deadline_h, self._att_deadline_m = _parse_time(attendance_deadline_time)
         self._coach_morning_h, self._coach_morning_m = _parse_time(coach_morning_card_time)
         self._attendance_pre_reminder_minutes = attendance_pre_reminder_minutes or [60, 30]
+        self._parent_abs_followup_h, self._parent_abs_followup_m = _parse_time(parent_absence_followup_time)
         self._digest_h, self._digest_m = _parse_time(digest_time)
         self._birthday_h, self._birthday_m = _parse_time(birthday_check_time)
         self._scheduler = None
@@ -227,6 +229,19 @@ class BotScheduler:
         )
 
         # ── Дні народження: тренеру/власнику на модерацію ─────────────────
+        sch.add_job(
+            self._job_parent_absence_followups,
+            CronTrigger(
+                hour=self._parent_abs_followup_h,
+                minute=self._parent_abs_followup_m,
+                timezone=self._timezone,
+            ),
+            id="parent_absence_followups",
+            name="Нагадування батькам про пропуски",
+            replace_existing=True,
+            misfire_grace_time=300,
+        )
+
         if self._birthday_svc:
             sch.add_job(
                 self._job_birthdays,
@@ -329,6 +344,20 @@ class BotScheduler:
             log.info("[Scheduler] Сповіщення неактивних: %s", results)
         except Exception as e:
             log.error("[Scheduler] Помилка inactivity_check: %s", e)
+
+    def _job_parent_absence_followups(self) -> None:
+        log.info("[Scheduler] Запуск: нагадування батькам про пропуски")
+        try:
+            now = datetime.now(ZoneInfo(self._timezone))
+            sent = self._attendance_svc.send_parent_absence_followups(
+                now=now,
+                min_absences=2,
+                lookback_days=21,
+            )
+            if sent:
+                log.info("[Scheduler] Нагадувань батькам про пропуски: %d", sent)
+        except Exception as e:
+            log.error("[Scheduler] Помилка parent_absence_followups: %s", e)
 
     def _job_event_reminders(self) -> None:
         log.info("[Scheduler] Запуск: нагадування про події")
