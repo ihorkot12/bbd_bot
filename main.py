@@ -161,6 +161,11 @@ def _materialize_google_credentials() -> None:
         if hinted.exists():
             shutil.copy2(hinted, target)
             os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
+            return
+
+    # Keep bot alive on Railway even when creds file was not provided yet.
+    # Owner can later add GOOGLE_CREDENTIALS_JSON(_BASE64) and redeploy.
+    os.environ.setdefault("DRY_RUN", "true")
 
 
 def main() -> None:
