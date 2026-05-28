@@ -6,6 +6,9 @@ applies the small production hotfixes, then runs app.main.
 """
 from __future__ import annotations
 
+import base64
+import json
+import os
 import runpy
 import shutil
 import sys
@@ -113,7 +116,55 @@ def _apply_local_overrides() -> None:
         shutil.copy2(src, dst)
 
 
+def _materialize_google_credentials() -> None:
+    """
+    Railway does not include local files like credentials.json from a developer PC.
+    If credentials are provided via env vars, write them to a local file and
+    point GOOGLE_CREDENTIALS_FILE to that runtime path.
+    """
+    target = ROOT / "credentials.json"
+    if target.exists():
+        os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
+        return
+
+    raw_json = os.getenv("GOOGLE_CREDENTIALS_JSON", "").strip()
+    raw_b64 = os.getenv("GOOGLE_CREDENTIALS_JSON_BASE64", "").strip()
+    file_hint = os.getenv("GOOGLE_CREDENTIALS_FILE", "").strip()
+
+    payload = ""
+    if raw_json:
+        payload = raw_json
+    elif raw_b64:
+        try:
+            payload = base64.b64decode(raw_b64).decode("utf-8")
+        except Exception:
+            payload = ""
+    elif file_hint.startswith("{"):
+        payload = file_hint
+
+    if payload:
+        try:
+            parsed = json.loads(payload)
+            target.write_text(
+                json.dumps(parsed, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            target.write_text(payload, encoding="utf-8")
+        os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
+        return
+
+    if file_hint:
+        hinted = Path(file_hint)
+        if not hinted.is_absolute():
+            hinted = ROOT / file_hint
+        if hinted.exists():
+            shutil.copy2(hinted, target)
+            os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
+
+
 def main() -> None:
+    _materialize_google_credentials()
     _ensure_runtime_app()
     _apply_hotfixes()
     _apply_local_overrides()
