@@ -422,7 +422,10 @@ def register_handlers(
 
             # ── Відвідуваність ─────────────────────────────────────────────────
             elif data.startswith("att:"):
-                if not user_can(tg_id, "mark_attendance"):
+                if (
+                    not user_can(tg_id, "mark_attendance")
+                    and role not in (Role.OWNER, Role.ADMIN)
+                ):
                     bot.answer_callback_query(call.id, "⛔ Немає доступу", show_alert=True)
                     return
                 _handle_attendance(bot, call, data, tg_id, attendance_svc, repos)
@@ -467,7 +470,7 @@ def register_handlers(
                 bot.answer_callback_query(call.id, "Невідома дія")
 
         except Exception as e:
-            log.error("Помилка callback '%s' від user=%s: %s", data, tg_id, e)
+            log.exception("Помилка callback '%s' від user=%s: %s", data, tg_id, e)
             bot.answer_callback_query(call.id, "⚠️ Помилка. Спробуйте ще раз.", show_alert=True)
 
     log.info("Хендлери зареєстровано")
@@ -678,6 +681,12 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
     parts = data.split(":")
     action = parts[1] if len(parts) > 1 else ""
 
+    def _quick_answer(text: str | None = None, show_alert: bool = False):
+        try:
+            bot.answer_callback_query(call.id, text, show_alert=show_alert)
+        except Exception:
+            pass
+
     def _accessible_groups():
         groups = repos.groups.get_by_coach(tg_id)
         if groups:
@@ -753,6 +762,7 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
 
     elif action == "toggle" and len(parts) >= 5:
         group_id, lesson_date_str, member_id = parts[2], parts[3], parts[4]
+        _quick_answer("Зберігаю відмітку...")
         lesson_date = _parse_date_str(lesson_date_str)
         # Перемикаємо статус: unmarked → present → absent → present
         records = attendance_svc._attendance.get_by_group_date(group_id, lesson_date)
@@ -767,10 +777,26 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
         )
-        bot.answer_callback_query(call.id)
+
+    elif action == "set" and len(parts) >= 6:
+        status_str, group_id, lesson_date_str, member_id = parts[2], parts[3], parts[4], parts[5]
+        _quick_answer("Зберігаю відмітку...")
+        try:
+            new_status = AttendanceStatus(status_str)
+        except ValueError:
+            bot.answer_callback_query(call.id, "Невідомий статус", show_alert=True)
+            return
+        lesson_date = _parse_date_str(lesson_date_str)
+        attendance_svc.mark_attendance(group_id, lesson_date, member_id, new_status, tg_id)
+        journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
+        bot.edit_message_reply_markup(
+            call.message.chat.id, call.message.message_id,
+            reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
+        )
 
     elif action == "close" and len(parts) >= 4:
         group_id, lesson_date_str = parts[2], parts[3]
+        _quick_answer("Закриваю журнал...")
         lesson_date = _parse_date_str(lesson_date_str)
         present, absent = attendance_svc.close_journal(group_id, lesson_date, tg_id)
         bot.edit_message_text(
