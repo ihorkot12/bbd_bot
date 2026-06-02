@@ -131,26 +131,34 @@ def _materialize_google_credentials() -> None:
     raw_b64 = os.getenv("GOOGLE_CREDENTIALS_JSON_BASE64", "").strip()
     file_hint = os.getenv("GOOGLE_CREDENTIALS_FILE", "").strip()
 
-    payload = ""
-    if raw_json:
-        payload = raw_json
-    elif raw_b64:
+    payload_candidates: list[str] = []
+    if raw_b64:
         try:
-            payload = base64.b64decode(raw_b64).decode("utf-8")
+            payload_candidates.append(
+                base64.b64decode(raw_b64, validate=True).decode("utf-8")
+            )
         except Exception:
-            payload = ""
-    elif file_hint.startswith("{"):
-        payload = file_hint
+            pass
+    if raw_json:
+        payload_candidates.append(raw_json)
+    if file_hint.startswith("{"):
+        payload_candidates.append(file_hint)
 
-    if payload:
+    fallback_payload = ""
+    for payload in payload_candidates:
         try:
             parsed = json.loads(payload)
             target.write_text(
                 json.dumps(parsed, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+            os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
+            return
         except Exception:
-            target.write_text(payload, encoding="utf-8")
+            fallback_payload = payload
+
+    if fallback_payload:
+        target.write_text(fallback_payload, encoding="utf-8")
         os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
         return
 
