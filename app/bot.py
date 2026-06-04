@@ -716,6 +716,18 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
             reply_markup=kb.back_button("menu:attendance"),
         )
 
+    if action in {"g", "t", "s", "c"} and len(parts) >= 3:
+        payload = kb.resolve_attendance_callback(parts[2])
+        if not payload:
+            bot.answer_callback_query(
+                call.id,
+                "Кнопка застаріла. Відкрийте журнал ще раз.",
+                show_alert=True,
+            )
+            return
+        action = str(payload[0])
+        parts = ["att", action, *[str(item) for item in payload[1:]]]
+
     if action == "mark":
         groups = _accessible_groups()
         if not groups:

@@ -5,9 +5,47 @@ keyboards.py — Ukrainian inline та reply keyboards для pyTelegramBotAPI.
 """
 from __future__ import annotations
 
-from typing import List, Optional
+import time
+import uuid
+from typing import Any, List, Optional
 
 from telebot import types
+
+
+_ATTENDANCE_CALLBACK_TTL_SECONDS = 6 * 60 * 60
+_ATTENDANCE_CALLBACKS: dict[str, tuple[float, tuple[Any, ...]]] = {}
+
+
+def _cleanup_attendance_callbacks(now: float) -> None:
+    expired = [
+        token
+        for token, (expires_at, _) in _ATTENDANCE_CALLBACKS.items()
+        if expires_at <= now
+    ]
+    for token in expired:
+        _ATTENDANCE_CALLBACKS.pop(token, None)
+
+
+def register_attendance_callback(*payload: Any) -> str:
+    now = time.time()
+    _cleanup_attendance_callbacks(now)
+    token = uuid.uuid4().hex[:12]
+    _ATTENDANCE_CALLBACKS[token] = (
+        now + _ATTENDANCE_CALLBACK_TTL_SECONDS,
+        tuple(payload),
+    )
+    return token
+
+
+def resolve_attendance_callback(token: str) -> tuple[Any, ...] | None:
+    item = _ATTENDANCE_CALLBACKS.get(token)
+    if not item:
+        return None
+    expires_at, payload = item
+    if expires_at <= time.time():
+        _ATTENDANCE_CALLBACKS.pop(token, None)
+        return None
+    return payload
 
 
 # ── Головні меню ──────────────────────────────────────────────────────────────
@@ -214,7 +252,7 @@ def attendance_groups_keyboard(groups: List, mode: str,
         kb.add(
             types.InlineKeyboardButton(
                 label,
-                callback_data=f"att:pickg:{mode}:{group.group_id}:{lesson_date}",
+                callback_data=f"att:g:{register_attendance_callback('pickg', mode, group.group_id, lesson_date)}",
             )
         )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:attendance"))
@@ -241,11 +279,12 @@ def mark_attendance_keyboard(group_id: str, lesson_date: str,
             icon = "⬜"
         kb.add(types.InlineKeyboardButton(
             f"{icon} {name}",
-            callback_data=f"att:toggle:{group_id}:{lesson_date}:{mid}"
+            callback_data=f"att:t:{register_attendance_callback('toggle', group_id, lesson_date, mid)}"
         ))
     kb.add(
         types.InlineKeyboardButton(
-            "💾 Зберегти і закрити", callback_data=f"att:close:{group_id}:{lesson_date}"
+            "💾 Зберегти і закрити",
+            callback_data=f"att:c:{register_attendance_callback('close', group_id, lesson_date)}"
         )
     )
     kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
@@ -257,13 +296,16 @@ def attendance_status_keyboard(group_id: str, lesson_date: str,
     kb = types.InlineKeyboardMarkup(row_width=3)
     kb.add(
         types.InlineKeyboardButton(
-            "✅ Присутній", callback_data=f"att:set:present:{group_id}:{lesson_date}:{member_id}"
+            "✅ Присутній",
+            callback_data=f"att:s:{register_attendance_callback('set', 'present', group_id, lesson_date, member_id)}"
         ),
         types.InlineKeyboardButton(
-            "❌ Відсутній", callback_data=f"att:set:absent:{group_id}:{lesson_date}:{member_id}"
+            "❌ Відсутній",
+            callback_data=f"att:s:{register_attendance_callback('set', 'absent', group_id, lesson_date, member_id)}"
         ),
         types.InlineKeyboardButton(
-            "📋 Поважна", callback_data=f"att:set:excused:{group_id}:{lesson_date}:{member_id}"
+            "📋 Поважна",
+            callback_data=f"att:s:{register_attendance_callback('set', 'excused', group_id, lesson_date, member_id)}"
         ),
     )
     return kb
@@ -396,7 +438,7 @@ def coach_morning_card_keyboard(groups: List[dict], lesson_date: str) -> types.I
         kb.add(
             types.InlineKeyboardButton(
                 label,
-                callback_data=f"att:pickg:mark:{item['group_id']}:{lesson_date}",
+                callback_data=f"att:g:{register_attendance_callback('pickg', 'mark', item['group_id'], lesson_date)}",
             )
         )
     kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
