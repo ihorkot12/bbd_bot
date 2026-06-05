@@ -256,12 +256,26 @@ def main() -> None:
     log.info("Форма пробного: %s", cfg.trial_form_url)
     log.info("Натисніть Ctrl+C для зупинки")
 
-    bot.infinity_polling(
-        timeout=30,
-        long_polling_timeout=20,
-        logger_level=None,
-        allowed_updates=["message", "callback_query"],
-    )
+    try:
+        log.info("Resetting Telegram webhook before polling...")
+        try:
+            bot.remove_webhook(drop_pending_updates=False)
+        except TypeError:
+            bot.remove_webhook()
+    except Exception as e:
+        log.warning("Could not reset Telegram webhook before polling: %s", e)
+
+    while True:
+        try:
+            bot.infinity_polling(
+                timeout=30,
+                long_polling_timeout=20,
+                logger_level=None,
+                allowed_updates=["message", "callback_query"],
+            )
+        except Exception:
+            log.exception("Telegram polling crashed; restarting in 15 seconds")
+            time.sleep(15)
 
 
 def _build_stub_repos():
