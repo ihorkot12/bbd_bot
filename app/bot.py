@@ -833,7 +833,6 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
 
     elif action == "toggle" and len(parts) >= 5:
         group_id, lesson_date_str, member_id = parts[2], parts[3], parts[4]
-        _quick_answer("Зберігаю відмітку...")
         lesson_date = _parse_date_str(lesson_date_str)
         # Перемикаємо статус: unmarked → present → absent → present
         records = attendance_svc._attendance.get_by_group_date(group_id, lesson_date)
@@ -843,15 +842,19 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
         else:
             new_status = AttendanceStatus.ABSENT
         attendance_svc.mark_attendance(group_id, lesson_date, member_id, new_status, tg_id)
+        log.info(
+            "Attendance saved: group=%s date=%s member=%s status=%s user=%s",
+            group_id, lesson_date_str, member_id, new_status.value, tg_id,
+        )
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
         bot.edit_message_reply_markup(
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
         )
+        _quick_answer("✅ Збережено")
 
     elif action == "set" and len(parts) >= 6:
         status_str, group_id, lesson_date_str, member_id = parts[2], parts[3], parts[4], parts[5]
-        _quick_answer("Зберігаю відмітку...")
         try:
             new_status = AttendanceStatus(status_str)
         except ValueError:
@@ -859,22 +862,31 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
             return
         lesson_date = _parse_date_str(lesson_date_str)
         attendance_svc.mark_attendance(group_id, lesson_date, member_id, new_status, tg_id)
+        log.info(
+            "Attendance saved: group=%s date=%s member=%s status=%s user=%s",
+            group_id, lesson_date_str, member_id, new_status.value, tg_id,
+        )
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
         bot.edit_message_reply_markup(
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
         )
+        _quick_answer("✅ Збережено")
 
     elif action == "close" and len(parts) >= 4:
         group_id, lesson_date_str = parts[2], parts[3]
-        _quick_answer("Закриваю журнал...")
         lesson_date = _parse_date_str(lesson_date_str)
         present, absent = attendance_svc.close_journal(group_id, lesson_date, tg_id)
+        log.info(
+            "Attendance journal closed: group=%s date=%s present=%s absent=%s user=%s",
+            group_id, lesson_date_str, present, absent, tg_id,
+        )
         bot.edit_message_text(
             f"✅ Журнал закрито!\n✅ Присутніх: {present}\n❌ Відсутніх: {absent}",
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.back_button("menu:attendance")
         )
+        _quick_answer("✅ Журнал закрито")
 
     elif action == "unclosed":
         unclosed = attendance_svc.check_unclosed_journals()
