@@ -5,6 +5,7 @@ keyboards.py — Ukrainian inline та reply keyboards для pyTelegramBotAPI.
 """
 from __future__ import annotations
 
+import hashlib
 import time
 import uuid
 from typing import Any, List, Optional
@@ -46,6 +47,10 @@ def resolve_attendance_callback(token: str) -> tuple[Any, ...] | None:
         _ATTENDANCE_CALLBACKS.pop(token, None)
         return None
     return payload
+
+
+def attendance_id_token(value: str) -> str:
+    return hashlib.blake2s(str(value).encode("utf-8"), digest_size=5).hexdigest()
 
 
 # ── Головні меню ──────────────────────────────────────────────────────────────
@@ -252,7 +257,7 @@ def attendance_groups_keyboard(groups: List, mode: str,
         kb.add(
             types.InlineKeyboardButton(
                 label,
-                callback_data=f"att:g:{register_attendance_callback('pickg', mode, group.group_id, lesson_date)}",
+                callback_data=f"att:dg:{mode}:{attendance_id_token(group.group_id)}:{lesson_date}",
             )
         )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:attendance"))
@@ -279,12 +284,12 @@ def mark_attendance_keyboard(group_id: str, lesson_date: str,
             icon = "⬜"
         kb.add(types.InlineKeyboardButton(
             f"{icon} {name}",
-            callback_data=f"att:t:{register_attendance_callback('toggle', group_id, lesson_date, mid)}"
+            callback_data=f"att:dt:{attendance_id_token(group_id)}:{lesson_date}:{attendance_id_token(mid)}"
         ))
     kb.add(
         types.InlineKeyboardButton(
             "💾 Зберегти і закрити",
-            callback_data=f"att:c:{register_attendance_callback('close', group_id, lesson_date)}"
+            callback_data=f"att:dc:{attendance_id_token(group_id)}:{lesson_date}"
         )
     )
     kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
@@ -297,15 +302,15 @@ def attendance_status_keyboard(group_id: str, lesson_date: str,
     kb.add(
         types.InlineKeyboardButton(
             "✅ Присутній",
-            callback_data=f"att:s:{register_attendance_callback('set', 'present', group_id, lesson_date, member_id)}"
+            callback_data=f"att:ds:present:{attendance_id_token(group_id)}:{lesson_date}:{attendance_id_token(member_id)}"
         ),
         types.InlineKeyboardButton(
             "❌ Відсутній",
-            callback_data=f"att:s:{register_attendance_callback('set', 'absent', group_id, lesson_date, member_id)}"
+            callback_data=f"att:ds:absent:{attendance_id_token(group_id)}:{lesson_date}:{attendance_id_token(member_id)}"
         ),
         types.InlineKeyboardButton(
             "📋 Поважна",
-            callback_data=f"att:s:{register_attendance_callback('set', 'excused', group_id, lesson_date, member_id)}"
+            callback_data=f"att:ds:excused:{attendance_id_token(group_id)}:{lesson_date}:{attendance_id_token(member_id)}"
         ),
     )
     return kb
@@ -438,7 +443,7 @@ def coach_morning_card_keyboard(groups: List[dict], lesson_date: str) -> types.I
         kb.add(
             types.InlineKeyboardButton(
                 label,
-                callback_data=f"att:g:{register_attendance_callback('pickg', 'mark', item['group_id'], lesson_date)}",
+                callback_data=f"att:dg:mark:{attendance_id_token(item['group_id'])}:{lesson_date}",
             )
         )
     kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))

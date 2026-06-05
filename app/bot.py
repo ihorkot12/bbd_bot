@@ -716,6 +716,65 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
             reply_markup=kb.back_button("menu:attendance"),
         )
 
+    def _resolve_group_token(group_token: str):
+        for group in _accessible_groups():
+            if kb.attendance_id_token(group.group_id) == group_token:
+                return group
+        return None
+
+    def _resolve_member_token(group_id: str, lesson_date, member_token: str):
+        for member in attendance_svc.get_journal_for_group(group_id, lesson_date):
+            member_id = str(member.get("member_id", ""))
+            if kb.attendance_id_token(member_id) == member_token:
+                return member_id
+        return None
+
+    if action == "dg" and len(parts) >= 5:
+        mode, group_token, lesson_date_str = parts[2], parts[3], parts[4]
+        group = _resolve_group_token(group_token)
+        if not group:
+            bot.answer_callback_query(call.id, "⛔ Немає доступу до цієї групи", show_alert=True)
+            return
+        action = "pickg"
+        parts = ["att", action, mode, group.group_id, lesson_date_str]
+
+    elif action == "dt" and len(parts) >= 5:
+        group_token, lesson_date_str, member_token = parts[2], parts[3], parts[4]
+        lesson_date = _parse_date_str(lesson_date_str)
+        group = _resolve_group_token(group_token)
+        if not group:
+            bot.answer_callback_query(call.id, "⛔ Немає доступу до цієї групи", show_alert=True)
+            return
+        member_id = _resolve_member_token(group.group_id, lesson_date, member_token)
+        if not member_id:
+            bot.answer_callback_query(call.id, "Учня не знайдено. Відкрийте журнал ще раз.", show_alert=True)
+            return
+        action = "toggle"
+        parts = ["att", action, group.group_id, lesson_date_str, member_id]
+
+    elif action == "ds" and len(parts) >= 6:
+        status_str, group_token, lesson_date_str, member_token = parts[2], parts[3], parts[4], parts[5]
+        lesson_date = _parse_date_str(lesson_date_str)
+        group = _resolve_group_token(group_token)
+        if not group:
+            bot.answer_callback_query(call.id, "⛔ Немає доступу до цієї групи", show_alert=True)
+            return
+        member_id = _resolve_member_token(group.group_id, lesson_date, member_token)
+        if not member_id:
+            bot.answer_callback_query(call.id, "Учня не знайдено. Відкрийте журнал ще раз.", show_alert=True)
+            return
+        action = "set"
+        parts = ["att", action, status_str, group.group_id, lesson_date_str, member_id]
+
+    elif action == "dc" and len(parts) >= 4:
+        group_token, lesson_date_str = parts[2], parts[3]
+        group = _resolve_group_token(group_token)
+        if not group:
+            bot.answer_callback_query(call.id, "⛔ Немає доступу до цієї групи", show_alert=True)
+            return
+        action = "close"
+        parts = ["att", action, group.group_id, lesson_date_str]
+
     if action in {"g", "t", "s", "c"} and len(parts) >= 3:
         payload = kb.resolve_attendance_callback(parts[2])
         if not payload:

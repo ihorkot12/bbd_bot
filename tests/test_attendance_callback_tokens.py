@@ -33,12 +33,11 @@ def test_attendance_member_callbacks_stay_under_telegram_limit_for_long_ids():
     assert attendance_callbacks
     assert all(len(data.encode("utf-8")) <= 64 for data in attendance_callbacks)
 
-    token = attendance_callbacks[0].split(":")[2]
-    assert kb.resolve_attendance_callback(token) == (
-        "toggle",
-        group_id,
-        "2026-06-04",
-        member_id,
+    assert attendance_callbacks[0] == (
+        "att:dt:"
+        f"{kb.attendance_id_token(group_id)}:"
+        "2026-06-04:"
+        f"{kb.attendance_id_token(member_id)}"
     )
 
 
@@ -55,10 +54,8 @@ def test_attendance_group_callbacks_stay_under_telegram_limit_for_long_ids():
     assert attendance_callbacks
     assert all(len(data.encode("utf-8")) <= 64 for data in attendance_callbacks)
 
-    token = attendance_callbacks[0].split(":")[2]
-    assert kb.resolve_attendance_callback(token) == (
-        "pickg",
-        "mark",
-        group.group_id,
-        "2026-06-04",
+    assert attendance_callbacks[0] == (
+        "att:dg:mark:"
+        f"{kb.attendance_id_token(group.group_id)}:"
+        "2026-06-04"
     )
