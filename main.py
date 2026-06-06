@@ -22,6 +22,18 @@ APP_ROOT = ROOT / ".runtime_app" / "black-bear-dojo-bot-v2"
 LOCAL_APP_OVERRIDE = ROOT / "app"
 
 
+def _running_on_railway() -> bool:
+    return any(
+        os.getenv(name)
+        for name in ("RAILWAY_ENVIRONMENT", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE_ID")
+    )
+
+
+def _enable_real_data_mode() -> None:
+    if _running_on_railway():
+        os.environ["DRY_RUN"] = "false"
+
+
 def _replace_once(path: Path, old: str, new: str) -> None:
     text = path.read_text(encoding="utf-8")
     if new in text:
@@ -125,6 +137,7 @@ def _materialize_google_credentials() -> None:
     target = ROOT / "credentials.json"
     if target.exists():
         os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
+        _enable_real_data_mode()
         return
 
     raw_json = os.getenv("GOOGLE_CREDENTIALS_JSON", "").strip()
@@ -153,6 +166,7 @@ def _materialize_google_credentials() -> None:
                 encoding="utf-8",
             )
             os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
+            _enable_real_data_mode()
             return
         except Exception:
             fallback_payload = payload
@@ -160,6 +174,7 @@ def _materialize_google_credentials() -> None:
     if fallback_payload:
         target.write_text(fallback_payload, encoding="utf-8")
         os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
+        _enable_real_data_mode()
         return
 
     if file_hint:
@@ -169,10 +184,16 @@ def _materialize_google_credentials() -> None:
         if hinted.exists():
             shutil.copy2(hinted, target)
             os.environ["GOOGLE_CREDENTIALS_FILE"] = str(target)
+            _enable_real_data_mode()
             return
 
-    # Keep bot alive on Railway even when creds file was not provided yet.
-    # Owner can later add GOOGLE_CREDENTIALS_JSON(_BASE64) and redeploy.
+    if _running_on_railway():
+        raise RuntimeError(
+            "Google Sheets credentials are missing on Railway. "
+            "Add GOOGLE_CREDENTIALS_JSON_BASE64 and redeploy; "
+            "the bot will not use test data in production."
+        )
+
     os.environ.setdefault("DRY_RUN", "true")
 
 
