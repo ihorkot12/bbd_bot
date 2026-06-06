@@ -847,6 +847,9 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
             group_id, lesson_date_str, member_id, new_status.value, tg_id,
         )
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
+        saved = next((item for item in journal if str(item["member_id"]) == str(member_id)), None)
+        if not saved or saved.get("status") != new_status.value:
+            raise RuntimeError("Attendance write could not be verified")
         bot.edit_message_reply_markup(
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
@@ -867,6 +870,9 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
             group_id, lesson_date_str, member_id, new_status.value, tg_id,
         )
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
+        saved = next((item for item in journal if str(item["member_id"]) == str(member_id)), None)
+        if not saved or saved.get("status") != new_status.value:
+            raise RuntimeError("Attendance write could not be verified")
         bot.edit_message_reply_markup(
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
