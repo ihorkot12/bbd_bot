@@ -131,6 +131,31 @@ class SheetRepository:
             self._sheet_cache[name] = self._get_spreadsheet().worksheet(name)
         return self._sheet_cache[name]
 
+    @staticmethod
+    def _normalize_cell(value: object) -> str:
+        return str(value).strip()
+
+    def _sheet_headers(self, sheet_name: str) -> List[str]:
+        return [self._normalize_cell(h) for h in self._get_sheet(sheet_name).row_values(1)]
+
+    @staticmethod
+    def _first_header_positions(headers: List[str]) -> Dict[str, int]:
+        positions: Dict[str, int] = {}
+        duplicates: set[str] = set()
+        for idx, header in enumerate(headers):
+            if not header:
+                continue
+            if header in positions:
+                duplicates.add(header)
+                continue
+            positions[header] = idx
+        if duplicates:
+            log.warning(
+                "Duplicate Google Sheet headers ignored after first occurrence: %s",
+                ", ".join(sorted(duplicates)),
+            )
+        return positions
+
     def _all_records(self, sheet_name: str) -> List[Dict[str, str]]:
         """
         Повертає всі рядки як список dict.
@@ -138,11 +163,27 @@ class SheetRepository:
         """
         try:
             ws = self._get_sheet(sheet_name)
-            records = ws.get_all_records(empty2zero=False, default_blank="")
-            return [self._normalize_row(r) for r in records]
+            values = ws.get_all_values()
+            if not values:
+                return []
+            headers = [self._normalize_cell(h) for h in values[0]]
+            positions = self._first_header_positions(headers)
+            records: List[Dict[str, str]] = []
+            for values_row in values[1:]:
+                if not any(self._normalize_cell(cell) for cell in values_row):
+                    continue
+                row: Dict[str, str] = {}
+                for header, col_idx in positions.items():
+                    row[header] = (
+                        self._normalize_cell(values_row[col_idx])
+                        if col_idx < len(values_row)
+                        else ""
+                    )
+                records.append(row)
+            return records
         except Exception as e:
             log.error("Помилка читання аркуша '%s': %s", sheet_name, e)
-            return []
+            raise
 
     @staticmethod
     def _normalize_row(row: dict) -> Dict[str, str]:
@@ -155,38 +196,38 @@ class SheetRepository:
         Повертає 1-based індекс рядка (включно із заголовком = рядок 1).
         """
         ws = self._get_sheet(sheet_name)
-        records = ws.get_all_records(empty2zero=False, default_blank="")
-        headers = ws.row_values(1)
-        try:
-            col_idx = headers.index(col)
-        except ValueError:
+        values = ws.get_all_values()
+        if not values:
             return None
-        for i, row in enumerate(records, start=2):  # data starts at row 2
-            if str(row.get(col, "")).strip() == value:
+        headers = [self._normalize_cell(h) for h in values[0]]
+        positions = self._first_header_positions(headers)
+        col_idx = positions.get(col)
+        if col_idx is None:
+            return None
+        for i, row in enumerate(values[1:], start=2):  # data starts at row 2
+            cell_value = row[col_idx] if col_idx < len(row) else ""
+            if self._normalize_cell(cell_value) == value:
                 return i
         return None
 
     def _update_row(self, sheet_name: str, row_idx: int, data: Dict[str, str]) -> None:
         """Оновлює окремі клітинки у рядку за іменами колонок."""
         ws = self._get_sheet(sheet_name)
-        headers = ws.row_values(1)
+        positions = self._first_header_positions(self._sheet_headers(sheet_name))
         cells = []
         for col_name, val in data.items():
-            try:
-                col_idx = headers.index(col_name) + 1  # 1-based
-                cells.append(gspread.Cell(row_idx, col_idx, str(val)))
-            except ValueError:
+            col_idx = positions.get(col_name)
+            if col_idx is None:
                 log.warning("Колонка '%s' не знайдена в аркуші '%s'", col_name, sheet_name)
+                continue
+            cells.append(gspread.Cell(row_idx, col_idx + 1, str(val)))
         if cells:
             ws.update_cells(cells)
 
     def _append_row(self, sheet_name: str, values: List[str]) -> None:
         """Додає новий рядок у кінець аркуша."""
-        try:
-            ws = self._get_sheet(sheet_name)
-            ws.append_row(values, value_input_option="USER_ENTERED")
-        except Exception as e:
-            log.error("Помилка append до аркуша '%s': %s", sheet_name, e)
+        ws = self._get_sheet(sheet_name)
+        ws.append_row(values, value_input_option="USER_ENTERED")
 
     def _upsert(self, sheet_name: str, pk_col: str, pk_val: str,
                 row_dict: Dict[str, str]) -> None:
@@ -194,7 +235,10 @@ class SheetRepository:
         Якщо запис з pk_val вже є — оновлює.
         Якщо ні — додає новий рядок.
         """
-        headers = SHEET_HEADERS.get(sheet_name, list(row_dict.keys()))
+        headers = [h for h in self._sheet_headers(sheet_name) if h] or SHEET_HEADERS.get(
+            sheet_name,
+            list(row_dict.keys()),
+        )
         row_idx = self._find_row_index(sheet_name, pk_col, pk_val)
         if row_idx is not None:
             self._update_row(sheet_name, row_idx, row_dict)
@@ -359,7 +403,7 @@ class GsAttendanceRepository(SheetRepository):
     SHEET = "attendance"
 
     def _uses_legacy_headers(self) -> bool:
-        headers = self._get_sheet(self.SHEET).row_values(1)
+        headers = self._sheet_headers(self.SHEET)
         return "record_id" not in headers and "date" in headers
 
     def get_all(self) -> List[AttendanceRecord]:

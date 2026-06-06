@@ -322,14 +322,16 @@ class AttendanceService:
         Позначає або оновлює статус відвідуваності для конкретного учня.
         """
         existing = self._attendance.get_by_group_date(group_id, lesson_date)
-        existing_rec = next((r for r in existing if r.member_id == member_id), None)
+        matching = [r for r in existing if r.member_id == member_id]
 
-        if existing_rec:
-            existing_rec.status = status
-            existing_rec.marked_by = marked_by
-            existing_rec.marked_at = datetime.now()
-            self._attendance.upsert(existing_rec)
-            return existing_rec
+        if matching:
+            marked_at = datetime.now()
+            for record in matching:
+                record.status = status
+                record.marked_by = marked_by
+                record.marked_at = marked_at
+                self._attendance.upsert(record)
+            return matching[-1]
         else:
             import uuid
             record = AttendanceRecord(

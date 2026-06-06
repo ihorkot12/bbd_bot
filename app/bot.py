@@ -842,14 +842,14 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
         else:
             new_status = AttendanceStatus.ABSENT
         attendance_svc.mark_attendance(group_id, lesson_date, member_id, new_status, tg_id)
-        log.info(
-            "Attendance saved: group=%s date=%s member=%s status=%s user=%s",
-            group_id, lesson_date_str, member_id, new_status.value, tg_id,
-        )
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
         saved = next((item for item in journal if str(item["member_id"]) == str(member_id)), None)
         if not saved or saved.get("status") != new_status.value:
             raise RuntimeError("Attendance write could not be verified")
+        log.info(
+            "Attendance saved: group=%s date=%s member=%s status=%s user=%s",
+            group_id, lesson_date_str, member_id, new_status.value, tg_id,
+        )
         bot.edit_message_reply_markup(
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
@@ -865,14 +865,14 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
             return
         lesson_date = _parse_date_str(lesson_date_str)
         attendance_svc.mark_attendance(group_id, lesson_date, member_id, new_status, tg_id)
-        log.info(
-            "Attendance saved: group=%s date=%s member=%s status=%s user=%s",
-            group_id, lesson_date_str, member_id, new_status.value, tg_id,
-        )
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
         saved = next((item for item in journal if str(item["member_id"]) == str(member_id)), None)
         if not saved or saved.get("status") != new_status.value:
             raise RuntimeError("Attendance write could not be verified")
+        log.info(
+            "Attendance saved: group=%s date=%s member=%s status=%s user=%s",
+            group_id, lesson_date_str, member_id, new_status.value, tg_id,
+        )
         bot.edit_message_reply_markup(
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
