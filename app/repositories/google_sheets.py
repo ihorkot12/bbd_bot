@@ -448,6 +448,12 @@ class GsAttendanceRepository(SheetRepository):
             record.record_id = str(uuid.uuid4())[:8]
         self.upsert(record)
 
+    def delete(self, record_id: str) -> None:
+        pk_col = "date" if self._uses_legacy_headers() else "record_id"
+        row_idx = self._find_row_index(self.SHEET, pk_col, record_id)
+        if row_idx is not None:
+            self._get_sheet(self.SHEET).delete_rows(row_idx)
+
     def upsert(self, record: AttendanceRecord) -> None:
         data = {
             "record_id": record.record_id,
@@ -585,6 +591,21 @@ class GsMessageTemplateRepository(SheetRepository):
             "variables": template.variables or "",
         }
         self._upsert(self.SHEET, "name", template.name, data)
+
+    def append_many(self, templates: List[MessageTemplate]) -> None:
+        if not templates:
+            return
+        headers = [h for h in self._sheet_headers(self.SHEET) if h] or SHEET_HEADERS[self.SHEET]
+        rows = []
+        for template in templates:
+            data = {
+                "template_id": template.template_id or str(uuid.uuid4())[:8],
+                "name": template.name,
+                "text": template.text,
+                "variables": template.variables or "",
+            }
+            rows.append([data.get(h, "") for h in headers])
+        self._get_sheet(self.SHEET).append_rows(rows, value_input_option="USER_ENTERED")
 
 
 class GsTaskRepository(SheetRepository):

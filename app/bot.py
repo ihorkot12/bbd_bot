@@ -729,6 +729,42 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
                 return member_id
         return None
 
+    def _latest_record(group_id: str, lesson_date, member_id: str):
+        records = attendance_svc._attendance.get_by_group_date(group_id, lesson_date)
+        matching = [r for r in records if r.member_id == member_id]
+        return matching[-1] if matching else None
+
+    def _undo_token_for(group_id: str, lesson_date_str: str, member_id: str, record) -> str:
+        previous_status = record.status.value if record else ""
+        previous_notes = (record.notes or "") if record else ""
+        return kb.register_attendance_callback(
+            "undo",
+            group_id,
+            lesson_date_str,
+            member_id,
+            previous_status,
+            previous_notes,
+        )
+
+    def _restore_member_state(
+        group_id: str,
+        lesson_date,
+        member_id: str,
+        previous_status: str,
+        previous_notes: str,
+    ) -> None:
+        if not previous_status:
+            attendance_svc.clear_attendance(group_id, lesson_date, member_id)
+            return
+        attendance_svc.mark_attendance(
+            group_id,
+            lesson_date,
+            member_id,
+            AttendanceStatus(previous_status),
+            tg_id,
+            notes=previous_notes,
+        )
+
     if action == "dg" and len(parts) >= 5:
         mode, group_token, lesson_date_str = parts[2], parts[3], parts[4]
         group = _resolve_group_token(group_token)
@@ -783,6 +819,18 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
             return
         action = "bulk"
         parts = ["att", action, mode, group.group_id, lesson_date_str]
+
+    elif action == "du" and len(parts) >= 3:
+        payload = kb.resolve_attendance_callback(parts[2])
+        if not payload:
+            bot.answer_callback_query(
+                call.id,
+                "Кнопка скасування застаріла. Відкрийте журнал ще раз.",
+                show_alert=True,
+            )
+            return
+        action = str(payload[0])
+        parts = ["att", action, *list(payload[1:])]
 
     if action in {"g", "t", "s", "c"} and len(parts) >= 3:
         payload = kb.resolve_attendance_callback(parts[2])
@@ -840,18 +888,51 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
         else:
             _render_view_for(group_id, lesson_date)
 
+    elif action == "undo" and len(parts) >= 6:
+        group_id, lesson_date_str, member_id = parts[2], parts[3], parts[4]
+        previous_status = str(parts[5])
+        previous_notes = str(parts[6]) if len(parts) >= 7 else ""
+        lesson_date = _parse_date_str(lesson_date_str)
+        _restore_member_state(group_id, lesson_date, member_id, previous_status, previous_notes)
+        journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
+        bot.edit_message_reply_markup(
+            call.message.chat.id, call.message.message_id,
+            reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
+        )
+        _quick_answer("↩️ Останню дію скасовано")
+
+    elif action == "undo_bulk" and len(parts) >= 5:
+        group_id, lesson_date_str, states = parts[2], parts[3], parts[4]
+        lesson_date = _parse_date_str(lesson_date_str)
+        for member_id, previous_status, previous_notes in states:
+            _restore_member_state(
+                group_id,
+                lesson_date,
+                str(member_id),
+                str(previous_status),
+                str(previous_notes),
+            )
+        journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
+        bot.edit_message_reply_markup(
+            call.message.chat.id, call.message.message_id,
+            reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
+        )
+        _quick_answer("↩️ Масову дію скасовано")
+
     elif action == "bulk" and len(parts) >= 5:
         mode, group_id, lesson_date_str = parts[2], parts[3], parts[4]
         lesson_date = _parse_date_str(lesson_date_str)
         target_status = {
             "present": AttendanceStatus.PRESENT,
             "absent": AttendanceStatus.ABSENT,
+            "excused": AttendanceStatus.EXCUSED,
         }.get(mode)
         if target_status is None:
             bot.answer_callback_query(call.id, "Невідома масова дія", show_alert=True)
             return
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
         unmarked = [item for item in journal if not item.get("status")]
+        undo_states = [(str(item["member_id"]), "", "") for item in unmarked]
         for item in unmarked:
             attendance_svc.mark_attendance(
                 group_id,
@@ -863,22 +944,52 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
         bot.edit_message_reply_markup(
             call.message.chat.id, call.message.message_id,
-            reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
+            reply_markup=kb.mark_attendance_keyboard(
+                group_id,
+                lesson_date_str,
+                journal,
+                undo_token=kb.register_attendance_callback(
+                    "undo_bulk",
+                    group_id,
+                    lesson_date_str,
+                    undo_states,
+                ) if undo_states else None,
+            )
         )
-        label = "присутні" if target_status == AttendanceStatus.PRESENT else "відсутні"
+        label = {
+            AttendanceStatus.PRESENT: "присутні",
+            AttendanceStatus.ABSENT: "відсутні",
+            AttendanceStatus.EXCUSED: "поважна",
+        }[target_status]
         _quick_answer(f"✅ Заповнено: {len(unmarked)} {label}")
 
     elif action == "toggle" and len(parts) >= 5:
         group_id, lesson_date_str, member_id = parts[2], parts[3], parts[4]
         lesson_date = _parse_date_str(lesson_date_str)
         # Перемикаємо статус: unmarked → present → absent → present
-        records = attendance_svc._attendance.get_by_group_date(group_id, lesson_date)
-        existing = next((r for r in records if r.member_id == member_id), None)
-        if not existing or existing.status == AttendanceStatus.ABSENT:
+        existing = _latest_record(group_id, lesson_date, member_id)
+        undo_token = _undo_token_for(group_id, lesson_date_str, member_id, existing)
+        existing_notes = (existing.notes or "").strip().lower() if existing else ""
+        new_notes = ""
+        if not existing:
             new_status = AttendanceStatus.PRESENT
-        else:
+        elif existing.status == AttendanceStatus.PRESENT and existing_notes == "late":
+            new_status = AttendanceStatus.EXCUSED
+        elif existing.status == AttendanceStatus.PRESENT:
             new_status = AttendanceStatus.ABSENT
-        attendance_svc.mark_attendance(group_id, lesson_date, member_id, new_status, tg_id)
+        elif existing.status == AttendanceStatus.ABSENT:
+            new_status = AttendanceStatus.PRESENT
+            new_notes = "late"
+        else:
+            new_status = AttendanceStatus.PRESENT
+        attendance_svc.mark_attendance(
+            group_id,
+            lesson_date,
+            member_id,
+            new_status,
+            tg_id,
+            notes=new_notes,
+        )
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
         saved = next((item for item in journal if str(item["member_id"]) == str(member_id)), None)
         if not saved or saved.get("status") != new_status.value:
@@ -889,19 +1000,33 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
         )
         bot.edit_message_reply_markup(
             call.message.chat.id, call.message.message_id,
-            reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
+            reply_markup=kb.mark_attendance_keyboard(
+                group_id,
+                lesson_date_str,
+                journal,
+                undo_token=undo_token,
+            )
         )
         _quick_answer("✅ Збережено")
 
     elif action == "set" and len(parts) >= 6:
         status_str, group_id, lesson_date_str, member_id = parts[2], parts[3], parts[4], parts[5]
         try:
-            new_status = AttendanceStatus(status_str)
+            new_status = AttendanceStatus.PRESENT if status_str == "late" else AttendanceStatus(status_str)
         except ValueError:
             bot.answer_callback_query(call.id, "Невідомий статус", show_alert=True)
             return
         lesson_date = _parse_date_str(lesson_date_str)
-        attendance_svc.mark_attendance(group_id, lesson_date, member_id, new_status, tg_id)
+        existing = _latest_record(group_id, lesson_date, member_id)
+        undo_token = _undo_token_for(group_id, lesson_date_str, member_id, existing)
+        attendance_svc.mark_attendance(
+            group_id,
+            lesson_date,
+            member_id,
+            new_status,
+            tg_id,
+            notes="late" if status_str == "late" else "",
+        )
         journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
         saved = next((item for item in journal if str(item["member_id"]) == str(member_id)), None)
         if not saved or saved.get("status") != new_status.value:
@@ -912,7 +1037,12 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
         )
         bot.edit_message_reply_markup(
             call.message.chat.id, call.message.message_id,
-            reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
+            reply_markup=kb.mark_attendance_keyboard(
+                group_id,
+                lesson_date_str,
+                journal,
+                undo_token=undo_token,
+            )
         )
         _quick_answer("✅ Збережено")
 
@@ -933,12 +1063,28 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
             )
             return
         present, absent = attendance_svc.close_journal(group_id, lesson_date, tg_id)
+        closed_journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
+        late = sum(
+            1 for item in closed_journal
+            if item.get("status") == "present"
+            and str(item.get("notes") or "").strip().lower() == "late"
+        )
+        excused = sum(1 for item in closed_journal if item.get("status") == "excused")
         log.info(
             "Attendance journal closed: group=%s date=%s present=%s absent=%s user=%s",
             group_id, lesson_date_str, present, absent, tg_id,
         )
+        close_lines = [
+            "✅ Журнал закрито!",
+            f"✅ Присутніх: {present}",
+            f"❌ Відсутніх: {absent}",
+        ]
+        if late:
+            close_lines.append(f"⏱ Запізнились: {late}")
+        if excused:
+            close_lines.append(f"📋 Поважна причина: {excused}")
         bot.edit_message_text(
-            f"✅ Журнал закрито!\n✅ Присутніх: {present}\n❌ Відсутніх: {absent}",
+            "\n".join(close_lines),
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.attendance_closed_keyboard(group_id, lesson_date_str)
         )
@@ -1663,12 +1809,49 @@ def _handle_templates(bot, call, data, templates_svc):
     action = parts[1] if len(parts) > 1 else ""
 
     if action == "list":
+        categories = getattr(templates_svc, "categories", lambda: {})()
         names = templates_svc.list_names()
-        lines = ["✉️ <b>Шаблони повідомлень:</b>\n"]
-        for name in names[:20]:
-            lines.append(f"• <code>{name}</code>")
+        lines = [
+            "✉️ <b>Шаблони повідомлень Black Bear Dojo</b>",
+            f"Всього доступно: <b>{len(names)}</b>\n",
+        ]
+        if categories:
+            for title, category_names in categories.items():
+                available = [name for name in category_names if name in names]
+                if not available:
+                    continue
+                lines.append(f"<b>{title}</b>")
+                for name in available:
+                    variables = getattr(templates_svc, "variables_for", lambda _name: ())(name)
+                    suffix = f" — {{{', '.join(variables)}}}" if variables else ""
+                    lines.append(f"• <code>{name}</code>{suffix}")
+                lines.append("")
+        else:
+            for name in names[:40]:
+                lines.append(f"• <code>{name}</code>")
         bot.edit_message_text(
             "\n".join(lines),
+            call.message.chat.id, call.message.message_id,
+            reply_markup=kb.back_button("menu:templates")
+        )
+    elif action == "reset":
+        seeded = templates_svc.seed_defaults()
+        templates_svc.invalidate_cache()
+        total = len(templates_svc.list_names())
+        bot.edit_message_text(
+            "🔄 <b>Шаблони оновлено</b>\n\n"
+            f"Додано в таблицю відсутніх шаблонів: <b>{seeded}</b>.\n"
+            f"Всього доступно: <b>{total}</b>.\n\n"
+            "Існуючі тексти в таблиці не перезаписував, щоб не стерти твої ручні правки.",
+            call.message.chat.id, call.message.message_id,
+            reply_markup=kb.back_button("menu:templates")
+        )
+    elif action == "edit":
+        bot.edit_message_text(
+            "✏️ <b>Редагування шаблонів</b>\n\n"
+            "Шаблони зберігаються в Google Sheet у вкладці <code>message_templates</code>.\n"
+            "Колонка <code>name</code> — технічна назва, колонка <code>text</code> — сам текст повідомлення.\n\n"
+            "Щоб швидко заповнити всі стандартні тексти, натисни <b>Скинути до дефолтів</b> у меню шаблонів.",
             call.message.chat.id, call.message.message_id,
             reply_markup=kb.back_button("menu:templates")
         )

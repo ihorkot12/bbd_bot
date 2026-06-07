@@ -266,7 +266,8 @@ def attendance_groups_keyboard(groups: List, mode: str,
 
 
 def mark_attendance_keyboard(group_id: str, lesson_date: str,
-                              members: List[dict]) -> types.InlineKeyboardMarkup:
+                              members: List[dict],
+                              undo_token: Optional[str] = None) -> types.InlineKeyboardMarkup:
     """
     Динамічна клавіатура для позначення кожного учня.
     members: список dict з ключами member_id, full_name, status (або None).
@@ -275,6 +276,13 @@ def mark_attendance_keyboard(group_id: str, lesson_date: str,
     unmarked_count = sum(1 for m in members if not m.get("status"))
 
     kb = types.InlineKeyboardMarkup(row_width=2)
+    if undo_token:
+        kb.add(
+            types.InlineKeyboardButton(
+                "↩️ Скасувати останню дію",
+                callback_data=f"att:du:{undo_token}",
+            )
+        )
     if unmarked_count:
         kb.add(
             types.InlineKeyboardButton(
@@ -285,6 +293,12 @@ def mark_attendance_keyboard(group_id: str, lesson_date: str,
                 f"❌ Порожні = відсутні ({unmarked_count})",
                 callback_data=f"att:db:absent:{group_token}:{lesson_date}",
             ),
+        )
+        kb.add(
+            types.InlineKeyboardButton(
+                f"📋 Порожні = поважна ({unmarked_count})",
+                callback_data=f"att:db:excused:{group_token}:{lesson_date}",
+            )
         )
     kb.add(
         types.InlineKeyboardButton(
@@ -302,6 +316,10 @@ def mark_attendance_keyboard(group_id: str, lesson_date: str,
             icon = "❌"
         else:
             icon = "⬜"
+        if status == "excused":
+            icon = "📋"
+        if status == "present" and str(m.get("notes") or "").strip().lower() == "late":
+            icon = "⏱"
         kb.add(types.InlineKeyboardButton(
             f"{icon} {name}",
             callback_data=f"att:dt:{group_token}:{lesson_date}:{attendance_id_token(mid)}"
@@ -332,6 +350,10 @@ def attendance_status_keyboard(group_id: str, lesson_date: str,
         types.InlineKeyboardButton(
             "❌ Відсутній",
             callback_data=f"att:ds:absent:{attendance_id_token(group_id)}:{lesson_date}:{attendance_id_token(member_id)}"
+        ),
+        types.InlineKeyboardButton(
+            "⏱ Запізнився",
+            callback_data=f"att:ds:late:{attendance_id_token(group_id)}:{lesson_date}:{attendance_id_token(member_id)}"
         ),
         types.InlineKeyboardButton(
             "📋 Поважна",

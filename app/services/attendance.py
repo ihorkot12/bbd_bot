@@ -268,11 +268,10 @@ class AttendanceService:
                 if group and group.name:
                     group_name = f"групи {group.name}"
 
-            text = (
-                f"👋 Доброго дня! Бачимо кілька пропусків у дитини "
-                f"<b>{member.full_name}</b> на заняттях {group_name}.\n\n"
-                "Якщо є пауза або зміни в графіку — дайте знати тренеру, "
-                "щоб ми коректно спланували тренування й підтримку."
+            text = self._templates.render(
+                "parent_absence_followup",
+                child_name=member.full_name,
+                group_name=group_name,
             )
             ok = self._notifications.send(
                 member.parent_telegram_id,
@@ -307,6 +306,7 @@ class AttendanceService:
                 "full_name": member.full_name,
                 "status": rec.status.value if rec else None,
                 "record_id": rec.record_id if rec else None,
+                "notes": rec.notes if rec else None,
             })
         return result
 
@@ -317,6 +317,7 @@ class AttendanceService:
         member_id: str,
         status: AttendanceStatus,
         marked_by: int,
+        notes: Optional[str] = None,
     ) -> AttendanceRecord:
         """
         Позначає або оновлює статус відвідуваності для конкретного учня.
@@ -330,6 +331,7 @@ class AttendanceService:
                 record.status = status
                 record.marked_by = marked_by
                 record.marked_at = marked_at
+                record.notes = notes or ""
                 self._attendance.upsert(record)
             return matching[-1]
         else:
@@ -342,9 +344,33 @@ class AttendanceService:
                 status=status,
                 marked_by=marked_by,
                 marked_at=datetime.now(),
+                notes=notes or "",
             )
             self._attendance.add(record)
             return record
+
+    def clear_attendance(
+        self,
+        group_id: str,
+        lesson_date: date,
+        member_id: str,
+    ) -> int:
+        """
+        Removes attendance records for a member on a date, restoring the unmarked state.
+        """
+        records = self._attendance.get_by_group_date(group_id, lesson_date)
+        matching = [r for r in records if r.member_id == member_id]
+        if not matching:
+            return 0
+        delete = getattr(self._attendance, "delete", None)
+        if delete is None:
+            raise RuntimeError("Attendance repository does not support delete")
+        deleted = 0
+        for record in matching:
+            if record.record_id:
+                delete(record.record_id)
+                deleted += 1
+        return deleted
 
     def close_journal(
         self, group_id: str, lesson_date: date, marked_by: int
@@ -358,9 +384,6 @@ class AttendanceService:
             r.member_id: r
             for r in self._attendance.get_by_group_date(group_id, lesson_date)
         }
-        present = sum(
-            1 for r in records.values() if r.status == AttendanceStatus.PRESENT
-        )
         # Не відмічені → absent
         for member in members:
             if member.member_id not in records:
@@ -368,7 +391,16 @@ class AttendanceService:
                     group_id, lesson_date, member.member_id,
                     AttendanceStatus.ABSENT, marked_by
                 )
-        absent = len(members) - present
+        final_records = {
+            r.member_id: r
+            for r in self._attendance.get_by_group_date(group_id, lesson_date)
+        }
+        present = sum(
+            1 for r in final_records.values() if r.status == AttendanceStatus.PRESENT
+        )
+        absent = sum(
+            1 for r in final_records.values() if r.status == AttendanceStatus.ABSENT
+        )
         log.info(
             "Журнал закрито: група=%s дата=%s присутніх=%d відсутніх=%d",
             group_id, lesson_date, present, absent
@@ -488,7 +520,16 @@ class AttendanceService:
             f"📋 <b>Журнал групи «{group_name}»</b>",
             f"📅 {lesson_date.strftime('%d.%m.%Y')}\n"
         ]
-        present_list = [j for j in journal if j["status"] == "present"]
+        late_list = [
+            j for j in journal
+            if j["status"] == "present"
+            and str(j.get("notes") or "").strip().lower() == "late"
+        ]
+        present_list = [
+            j for j in journal
+            if j["status"] == "present"
+            and str(j.get("notes") or "").strip().lower() != "late"
+        ]
         absent_list = [j for j in journal if j["status"] == "absent"]
         excused_list = [j for j in journal if j["status"] == "excused"]
         unmarked = [j for j in journal if j["status"] is None]
@@ -496,6 +537,11 @@ class AttendanceService:
         if present_list:
             lines.append(f"✅ Присутні ({len(present_list)}):")
             for j in present_list:
+                lines.append(f"  • {j['full_name']}")
+
+        if late_list:
+            lines.append(f"\n⏱ Запізнились ({len(late_list)}):")
+            for j in late_list:
                 lines.append(f"  • {j['full_name']}")
 
         if absent_list:

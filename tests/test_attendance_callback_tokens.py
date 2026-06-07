@@ -49,6 +49,26 @@ def test_attendance_member_callbacks_stay_under_telegram_limit_for_long_ids():
         f"{kb.attendance_id_token(group_id)}:"
         "2026-06-04"
     ) in attendance_callbacks
+    assert (
+        "att:db:excused:"
+        f"{kb.attendance_id_token(group_id)}:"
+        "2026-06-04"
+    ) in attendance_callbacks
+
+
+def test_attendance_undo_callback_uses_short_token():
+    markup = kb.mark_attendance_keyboard(
+        "group-12345678-1234-1234-1234-123456789012",
+        "2026-06-04",
+        [{"member_id": "member-1", "full_name": "Test Student", "status": "present"}],
+        undo_token="abc123",
+    )
+
+    callbacks = _callback_data(markup)
+    attendance_callbacks = [data for data in callbacks if data.startswith("att:")]
+
+    assert "att:du:abc123" in attendance_callbacks
+    assert all(len(data.encode("utf-8")) <= 64 for data in attendance_callbacks)
 
 
 def test_attendance_group_callbacks_stay_under_telegram_limit_for_long_ids():
