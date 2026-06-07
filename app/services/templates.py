@@ -476,7 +476,9 @@ class TemplateService:
         names = set(DEFAULT_TEMPLATES.keys())
         try:
             for t in self._repo.get_all():
-                names.add(t.name)
+                name = (t.name or "").strip()
+                if name:
+                    names.add(name)
         except Exception:
             pass
         return sorted(names)
