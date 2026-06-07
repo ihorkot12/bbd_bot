@@ -574,23 +574,64 @@ class GsEventRepository(SheetRepository):
 class GsMessageTemplateRepository(SheetRepository):
     SHEET = "message_templates"
 
-    def get_all(self) -> List[MessageTemplate]:
-        return [MessageTemplate.from_row(r) for r in self._all_records(self.SHEET)]
+    def _uses_legacy_headers(self) -> bool:
+        headers = self._sheet_headers(self.SHEET)
+        return "name" not in headers and "template_key" in headers and "body" in headers
 
-    def get_by_name(self, name: str) -> Optional[MessageTemplate]:
-        for r in self._all_records(self.SHEET):
-            if r.get("name") == name:
-                return MessageTemplate.from_row(r)
-        return None
+    @staticmethod
+    def _from_legacy_row(row: Dict[str, str]) -> MessageTemplate:
+        return MessageTemplate(
+            template_id=row.get("template_key", ""),
+            name=row.get("template_key", ""),
+            text=row.get("body", ""),
+            variables=row.get("variables") or None,
+        )
 
-    def upsert(self, template: MessageTemplate) -> None:
-        data = {
+    def _row_for_template(self, template: MessageTemplate) -> Dict[str, str]:
+        if self._uses_legacy_headers():
+            return {
+                "template_key": template.name,
+                "language": "uk",
+                "audience": "",
+                "title": template.name,
+                "body": template.text,
+                "variables": template.variables or "",
+                "enabled": "TRUE",
+                "updated_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        return {
             "template_id": template.template_id or str(uuid.uuid4())[:8],
             "name": template.name,
             "text": template.text,
             "variables": template.variables or "",
         }
-        self._upsert(self.SHEET, "name", template.name, data)
+
+    def get_all(self) -> List[MessageTemplate]:
+        rows = self._all_records(self.SHEET)
+        if self._uses_legacy_headers():
+            return [
+                self._from_legacy_row(r)
+                for r in rows
+                if r.get("template_key") and r.get("body")
+            ]
+        return [MessageTemplate.from_row(r) for r in rows]
+
+    def get_by_name(self, name: str) -> Optional[MessageTemplate]:
+        rows = self._all_records(self.SHEET)
+        if self._uses_legacy_headers():
+            for r in rows:
+                if r.get("template_key") == name and r.get("body"):
+                    return self._from_legacy_row(r)
+            return None
+        for r in rows:
+            if r.get("name") == name:
+                return MessageTemplate.from_row(r)
+        return None
+
+    def upsert(self, template: MessageTemplate) -> None:
+        data = self._row_for_template(template)
+        pk_col = "template_key" if self._uses_legacy_headers() else "name"
+        self._upsert(self.SHEET, pk_col, template.name, data)
 
     def append_many(self, templates: List[MessageTemplate]) -> None:
         if not templates:
@@ -598,12 +639,7 @@ class GsMessageTemplateRepository(SheetRepository):
         headers = [h for h in self._sheet_headers(self.SHEET) if h] or SHEET_HEADERS[self.SHEET]
         rows = []
         for template in templates:
-            data = {
-                "template_id": template.template_id or str(uuid.uuid4())[:8],
-                "name": template.name,
-                "text": template.text,
-                "variables": template.variables or "",
-            }
+            data = self._row_for_template(template)
             rows.append([data.get(h, "") for h in headers])
         self._get_sheet(self.SHEET).append_rows(rows, value_input_option="USER_ENTERED")
 
