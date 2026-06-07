@@ -343,6 +343,24 @@ def attendance_status_keyboard(group_id: str, lesson_date: str,
 
 # ── Ліди / Проби ──────────────────────────────────────────────────────────────
 
+def attendance_closed_keyboard(group_id: str, lesson_date: str) -> types.InlineKeyboardMarkup:
+    group_token = attendance_id_token(group_id)
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    kb.add(
+        types.InlineKeyboardButton(
+            "✏️ Редагувати журнал",
+            callback_data=f"att:dg:mark:{group_token}:{lesson_date}",
+        ),
+        types.InlineKeyboardButton(
+            "📊 Переглянути журнал",
+            callback_data=f"att:dg:view:{group_token}:{lesson_date}",
+        ),
+        types.InlineKeyboardButton("⬅️ Назад", callback_data="menu:attendance"),
+        types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"),
+    )
+    return kb
+
+
 def leads_menu() -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(

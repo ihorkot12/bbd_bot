@@ -940,7 +940,7 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
         bot.edit_message_text(
             f"✅ Журнал закрито!\n✅ Присутніх: {present}\n❌ Відсутніх: {absent}",
             call.message.chat.id, call.message.message_id,
-            reply_markup=kb.back_button("menu:attendance")
+            reply_markup=kb.attendance_closed_keyboard(group_id, lesson_date_str)
         )
         _quick_answer("✅ Журнал закрито")
 

@@ -69,3 +69,24 @@ def test_attendance_group_callbacks_stay_under_telegram_limit_for_long_ids():
         f"{kb.attendance_id_token(group.group_id)}:"
         "2026-06-04"
     )
+
+
+def test_closed_journal_callbacks_stay_under_telegram_limit_for_long_ids():
+    group_id = "group-12345678-1234-1234-1234-123456789012"
+    markup = kb.attendance_closed_keyboard(group_id, "2026-06-04")
+
+    callbacks = _callback_data(markup)
+    attendance_callbacks = [data for data in callbacks if data.startswith("att:")]
+
+    assert attendance_callbacks
+    assert all(len(data.encode("utf-8")) <= 64 for data in attendance_callbacks)
+    assert (
+        "att:dg:mark:"
+        f"{kb.attendance_id_token(group_id)}:"
+        "2026-06-04"
+    ) in attendance_callbacks
+    assert (
+        "att:dg:view:"
+        f"{kb.attendance_id_token(group_id)}:"
+        "2026-06-04"
+    ) in attendance_callbacks
