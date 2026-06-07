@@ -33,12 +33,22 @@ def test_attendance_member_callbacks_stay_under_telegram_limit_for_long_ids():
     assert attendance_callbacks
     assert all(len(data.encode("utf-8")) <= 64 for data in attendance_callbacks)
 
-    assert attendance_callbacks[0] == (
+    assert (
         "att:dt:"
         f"{kb.attendance_id_token(group_id)}:"
         "2026-06-04:"
         f"{kb.attendance_id_token(member_id)}"
-    )
+    ) in attendance_callbacks
+    assert (
+        "att:db:present:"
+        f"{kb.attendance_id_token(group_id)}:"
+        "2026-06-04"
+    ) in attendance_callbacks
+    assert (
+        "att:db:absent:"
+        f"{kb.attendance_id_token(group_id)}:"
+        "2026-06-04"
+    ) in attendance_callbacks
 
 
 def test_attendance_group_callbacks_stay_under_telegram_limit_for_long_ids():

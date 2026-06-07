@@ -775,6 +775,15 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
         action = "close"
         parts = ["att", action, group.group_id, lesson_date_str]
 
+    elif action == "db" and len(parts) >= 5:
+        mode, group_token, lesson_date_str = parts[2], parts[3], parts[4]
+        group = _resolve_group_token(group_token)
+        if not group:
+            bot.answer_callback_query(call.id, "⛔ Немає доступу до цієї групи", show_alert=True)
+            return
+        action = "bulk"
+        parts = ["att", action, mode, group.group_id, lesson_date_str]
+
     if action in {"g", "t", "s", "c"} and len(parts) >= 3:
         payload = kb.resolve_attendance_callback(parts[2])
         if not payload:
@@ -831,6 +840,34 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
         else:
             _render_view_for(group_id, lesson_date)
 
+    elif action == "bulk" and len(parts) >= 5:
+        mode, group_id, lesson_date_str = parts[2], parts[3], parts[4]
+        lesson_date = _parse_date_str(lesson_date_str)
+        target_status = {
+            "present": AttendanceStatus.PRESENT,
+            "absent": AttendanceStatus.ABSENT,
+        }.get(mode)
+        if target_status is None:
+            bot.answer_callback_query(call.id, "Невідома масова дія", show_alert=True)
+            return
+        journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
+        unmarked = [item for item in journal if not item.get("status")]
+        for item in unmarked:
+            attendance_svc.mark_attendance(
+                group_id,
+                lesson_date,
+                str(item["member_id"]),
+                target_status,
+                tg_id,
+            )
+        journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
+        bot.edit_message_reply_markup(
+            call.message.chat.id, call.message.message_id,
+            reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
+        )
+        label = "присутні" if target_status == AttendanceStatus.PRESENT else "відсутні"
+        _quick_answer(f"✅ Заповнено: {len(unmarked)} {label}")
+
     elif action == "toggle" and len(parts) >= 5:
         group_id, lesson_date_str, member_id = parts[2], parts[3], parts[4]
         lesson_date = _parse_date_str(lesson_date_str)
@@ -882,6 +919,19 @@ def _handle_attendance(bot, call, data, tg_id, attendance_svc, repos):
     elif action == "close" and len(parts) >= 4:
         group_id, lesson_date_str = parts[2], parts[3]
         lesson_date = _parse_date_str(lesson_date_str)
+        journal = attendance_svc.get_journal_for_group(group_id, lesson_date)
+        unmarked = [item for item in journal if not item.get("status")]
+        if unmarked:
+            bot.edit_message_reply_markup(
+                call.message.chat.id, call.message.message_id,
+                reply_markup=kb.mark_attendance_keyboard(group_id, lesson_date_str, journal)
+            )
+            bot.answer_callback_query(
+                call.id,
+                f"Ще не відмічено: {len(unmarked)}. Заповни або натисни Порожні = відсутні.",
+                show_alert=True,
+            )
+            return
         present, absent = attendance_svc.close_journal(group_id, lesson_date, tg_id)
         log.info(
             "Attendance journal closed: group=%s date=%s present=%s absent=%s user=%s",

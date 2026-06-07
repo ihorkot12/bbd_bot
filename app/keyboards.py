@@ -271,7 +271,27 @@ def mark_attendance_keyboard(group_id: str, lesson_date: str,
     Динамічна клавіатура для позначення кожного учня.
     members: список dict з ключами member_id, full_name, status (або None).
     """
-    kb = types.InlineKeyboardMarkup(row_width=1)
+    group_token = attendance_id_token(group_id)
+    unmarked_count = sum(1 for m in members if not m.get("status"))
+
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    if unmarked_count:
+        kb.add(
+            types.InlineKeyboardButton(
+                f"✅ Порожні = присутні ({unmarked_count})",
+                callback_data=f"att:db:present:{group_token}:{lesson_date}",
+            ),
+            types.InlineKeyboardButton(
+                f"❌ Порожні = відсутні ({unmarked_count})",
+                callback_data=f"att:db:absent:{group_token}:{lesson_date}",
+            ),
+        )
+    kb.add(
+        types.InlineKeyboardButton(
+            "🔄 Оновити",
+            callback_data=f"att:dg:mark:{group_token}:{lesson_date}",
+        )
+    )
     for m in members:
         mid = m["member_id"]
         name = m["full_name"]
@@ -284,12 +304,17 @@ def mark_attendance_keyboard(group_id: str, lesson_date: str,
             icon = "⬜"
         kb.add(types.InlineKeyboardButton(
             f"{icon} {name}",
-            callback_data=f"att:dt:{attendance_id_token(group_id)}:{lesson_date}:{attendance_id_token(mid)}"
+            callback_data=f"att:dt:{group_token}:{lesson_date}:{attendance_id_token(mid)}"
+        ))
+    if unmarked_count:
+        kb.add(types.InlineKeyboardButton(
+            f"⚠️ Не відмічено: {unmarked_count}",
+            callback_data=f"att:dg:mark:{group_token}:{lesson_date}",
         ))
     kb.add(
         types.InlineKeyboardButton(
             "💾 Зберегти і закрити",
-            callback_data=f"att:dc:{attendance_id_token(group_id)}:{lesson_date}"
+            callback_data=f"att:dc:{group_token}:{lesson_date}"
         )
     )
     kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
