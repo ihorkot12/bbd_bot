@@ -104,6 +104,48 @@ def test_morning_card_sends_groups_sorted_and_deduped():
     assert sent_text.index("18:00") < sent_text.index("19:00")
 
 
+def test_planned_groups_for_date_returns_only_matching_day_sorted():
+    repos, notifications, svc = _build_service()
+    repos.groups.upsert(
+        Group(
+            group_id="g_late",
+            name="Late Group",
+            coach_telegram_id=333,
+            schedule="ср 19:00-19:40",
+            attendance_reminder_time="19:00",
+            attendance_deadline_time="20:00",
+            active=True,
+        )
+    )
+    repos.groups.upsert(
+        Group(
+            group_id="g_early",
+            name="Early Group",
+            coach_telegram_id=333,
+            schedule="ср 18:00-18:40",
+            attendance_reminder_time="18:00",
+            attendance_deadline_time="20:00",
+            active=True,
+        )
+    )
+    repos.groups.upsert(
+        Group(
+            group_id="g_other",
+            name="Other Day",
+            coach_telegram_id=333,
+            schedule="чт 18:00-18:40",
+            attendance_reminder_time="18:00",
+            attendance_deadline_time="20:00",
+            active=True,
+        )
+    )
+
+    planned = svc.get_planned_groups_for_date(date(2026, 5, 27))  # Wednesday
+
+    assert [item["group_id"] for item in planned] == ["g_early", "g_late"]
+    assert [item["time"] for item in planned] == ["18:00", "19:00"]
+
+
 def test_parent_absence_followups_only_for_multiple_absences_and_weekly_dedupe():
     repos, notifications, svc = _build_service()
     repos.groups.upsert(
@@ -154,3 +196,73 @@ def test_parent_absence_followups_only_for_multiple_absences_and_weekly_dedupe()
 
     next_week = now + timedelta(days=7)
     assert svc.send_parent_absence_followups(now=next_week, min_absences=2, lookback_days=21) == 1
+
+
+def test_absence_followup_candidates_include_only_two_plus_recent_absences():
+    repos, notifications, svc = _build_service()
+    repos.groups.upsert(
+        Group(
+            group_id="kids_d",
+            name="Kids D",
+            coach_telegram_id=444,
+            schedule="ср 18:00-19:00",
+            attendance_reminder_time="18:00",
+            attendance_deadline_time="20:00",
+            active=True,
+        )
+    )
+    repos.members.upsert(
+        Member(
+            member_id="m_two",
+            full_name="Two Absences",
+            birth_date=date(2016, 1, 1),
+            participant_type=ParticipantType.CHILD,
+            parent_phone="+380000000001",
+            group_id="kids_d",
+            active=True,
+        )
+    )
+    repos.members.upsert(
+        Member(
+            member_id="m_one",
+            full_name="One Absence",
+            birth_date=date(2016, 1, 1),
+            participant_type=ParticipantType.CHILD,
+            group_id="kids_d",
+            active=True,
+        )
+    )
+    today = date.today()
+    repos.attendance.add(
+        AttendanceRecord(
+            record_id="r1",
+            group_id="kids_d",
+            lesson_date=today - timedelta(days=2),
+            member_id="m_two",
+            status=AttendanceStatus.ABSENT,
+        )
+    )
+    repos.attendance.add(
+        AttendanceRecord(
+            record_id="r2",
+            group_id="kids_d",
+            lesson_date=today - timedelta(days=5),
+            member_id="m_two",
+            status=AttendanceStatus.ABSENT,
+        )
+    )
+    repos.attendance.add(
+        AttendanceRecord(
+            record_id="r3",
+            group_id="kids_d",
+            lesson_date=today - timedelta(days=3),
+            member_id="m_one",
+            status=AttendanceStatus.ABSENT,
+        )
+    )
+
+    candidates = svc.get_absence_followup_candidates(min_absences=2, lookback_days=21)
+
+    assert [(member.member_id, count, group.group_id) for member, count, group in candidates] == [
+        ("m_two", 2, "kids_d")
+    ]

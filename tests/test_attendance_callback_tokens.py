@@ -40,6 +40,12 @@ def test_attendance_member_callbacks_stay_under_telegram_limit_for_long_ids():
         f"{kb.attendance_id_token(member_id)}"
     ) in attendance_callbacks
     assert (
+        "att:de:"
+        f"{kb.attendance_id_token(group_id)}:"
+        "2026-06-04:"
+        f"{kb.attendance_id_token(member_id)}"
+    ) in attendance_callbacks
+    assert (
         "att:db:present:"
         f"{kb.attendance_id_token(group_id)}:"
         "2026-06-04"
@@ -68,6 +74,28 @@ def test_attendance_undo_callback_uses_short_token():
     attendance_callbacks = [data for data in callbacks if data.startswith("att:")]
 
     assert "att:du:abc123" in attendance_callbacks
+    assert all(len(data.encode("utf-8")) <= 64 for data in attendance_callbacks)
+
+
+def test_attendance_status_keyboard_has_clear_and_back_callbacks_under_limit():
+    group_id = "group-12345678-1234-1234-1234-123456789012"
+    member_id = "member-12345678-1234-1234-1234-123456789012"
+    markup = kb.attendance_status_keyboard(group_id, "2026-06-04", member_id)
+
+    callbacks = _callback_data(markup)
+    attendance_callbacks = [data for data in callbacks if data.startswith("att:")]
+
+    assert (
+        "att:ds:clear:"
+        f"{kb.attendance_id_token(group_id)}:"
+        "2026-06-04:"
+        f"{kb.attendance_id_token(member_id)}"
+    ) in attendance_callbacks
+    assert (
+        "att:dg:mark:"
+        f"{kb.attendance_id_token(group_id)}:"
+        "2026-06-04"
+    ) in attendance_callbacks
     assert all(len(data.encode("utf-8")) <= 64 for data in attendance_callbacks)
 
 

@@ -285,6 +285,60 @@ class AttendanceService:
 
         return sent
 
+    def get_planned_groups_for_date(
+        self,
+        lesson_date: Optional[date] = None,
+        groups: Optional[List[Group]] = None,
+    ) -> List[Dict]:
+        """
+        Returns active groups that have a lesson on the selected date.
+        """
+        lesson_date = lesson_date or date.today()
+        source_groups = groups if groups is not None else self._groups.get_active()
+        planned: List[Dict] = []
+
+        for group in source_groups:
+            if not group.active:
+                continue
+            lesson_time = _schedule_time_for_weekday(group.schedule, lesson_date.weekday())
+            if not lesson_time:
+                continue
+            planned.append(
+                {
+                    "group_id": group.group_id,
+                    "name": group.name,
+                    "time": lesson_time.strftime("%H:%M"),
+                    "schedule": group.schedule,
+                }
+            )
+
+        return sorted(planned, key=lambda item: (item["time"], item["name"]))
+
+    def get_absence_followup_candidates(
+        self,
+        min_absences: int = 2,
+        lookback_days: int = 21,
+    ) -> List[Tuple[Member, int, Optional[Group]]]:
+        """
+        Returns members who missed several recent trainings and are worth contacting.
+        """
+        today = date.today()
+        cutoff = today - timedelta(days=max(1, lookback_days))
+        candidates: List[Tuple[Member, int, Optional[Group]]] = []
+
+        for member in self._members.get_active():
+            records = [
+                r for r in self._attendance.get_by_member(member.member_id)
+                if r.lesson_date >= cutoff
+            ]
+            absences = sum(1 for r in records if r.status == AttendanceStatus.ABSENT)
+            if absences < min_absences:
+                continue
+            group = self._groups.get_by_id(member.group_id) if member.group_id else None
+            candidates.append((member, absences, group))
+
+        return sorted(candidates, key=lambda item: (item[2].name if item[2] else "", -item[1], item[0].full_name))
+
     # ── Позначення відвідуваності ──────────────────────────────────────────────
 
     def get_journal_for_group(

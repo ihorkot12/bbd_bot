@@ -139,7 +139,6 @@ def payments_menu() -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton("✏️ Змінити статус", callback_data="pay:edit"),
     )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:back"))
-    kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
     return kb
 
 
@@ -234,12 +233,31 @@ def payment_status_keyboard(member_id: str) -> types.InlineKeyboardMarkup:
 def attendance_menu() -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
+        types.InlineKeyboardButton("📌 Сьогодні", callback_data="att:today"),
         types.InlineKeyboardButton("📝 Відмітити присутність", callback_data="att:mark"),
         types.InlineKeyboardButton("📊 Переглянути журнал", callback_data="att:view"),
+        types.InlineKeyboardButton("📞 2+ пропуски", callback_data="att:followups"),
         types.InlineKeyboardButton("⚠️ Незакриті журнали", callback_data="att:unclosed"),
         types.InlineKeyboardButton("😴 Неактивні учні", callback_data="att:inactive"),
     )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:back"))
+    return kb
+
+
+def attendance_today_keyboard(items: List[dict], lesson_date: str) -> types.InlineKeyboardMarkup:
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    for item in items[:30]:
+        time_part = f"{item.get('time')} · " if item.get("time") else ""
+        label = f"📝 {time_part}{item['name']}"
+        kb.add(
+            types.InlineKeyboardButton(
+                label,
+                callback_data=(
+                    f"att:dg:mark:{attendance_id_token(item['group_id'])}:{lesson_date}"
+                ),
+            )
+        )
+    kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:attendance"))
     kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
     return kb
 
@@ -320,10 +338,17 @@ def mark_attendance_keyboard(group_id: str, lesson_date: str,
             icon = "📋"
         if status == "present" and str(m.get("notes") or "").strip().lower() == "late":
             icon = "⏱"
-        kb.add(types.InlineKeyboardButton(
-            f"{icon} {name}",
-            callback_data=f"att:dt:{group_token}:{lesson_date}:{attendance_id_token(mid)}"
-        ))
+        member_token = attendance_id_token(mid)
+        kb.row(
+            types.InlineKeyboardButton(
+                f"{icon} {name}",
+                callback_data=f"att:dt:{group_token}:{lesson_date}:{member_token}",
+            ),
+            types.InlineKeyboardButton(
+                "✏️",
+                callback_data=f"att:de:{group_token}:{lesson_date}:{member_token}",
+            ),
+        )
     if unmarked_count:
         kb.add(types.InlineKeyboardButton(
             f"⚠️ Не відмічено: {unmarked_count}",
@@ -360,6 +385,18 @@ def attendance_status_keyboard(group_id: str, lesson_date: str,
             callback_data=f"att:ds:excused:{attendance_id_token(group_id)}:{lesson_date}:{attendance_id_token(member_id)}"
         ),
     )
+    kb.add(
+        types.InlineKeyboardButton(
+            "⬜ Очистити",
+            callback_data=f"att:ds:clear:{attendance_id_token(group_id)}:{lesson_date}:{attendance_id_token(member_id)}",
+        )
+    )
+    kb.add(
+        types.InlineKeyboardButton(
+            "◀️ Назад до журналу",
+            callback_data=f"att:dg:mark:{attendance_id_token(group_id)}:{lesson_date}",
+        )
+    )
     return kb
 
 
@@ -392,7 +429,6 @@ def leads_menu() -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton("🔔 Надіслати нагадування", callback_data="lead:remind"),
     )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:back"))
-    kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
     return kb
 
 
@@ -455,7 +491,6 @@ def events_menu() -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton("🔔 Нагадування", callback_data="evt:remind"),
     )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:back"))
-    kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
     return kb
 
 
@@ -568,7 +603,6 @@ def templates_menu() -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton("🔄 Скинути до дефолтів", callback_data="tmpl:reset"),
     )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:back"))
-    kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
     return kb
 
 
@@ -583,5 +617,4 @@ def settings_menu() -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton("📊 Час дайджесту", callback_data="set:digest_time"),
     )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:back"))
-    kb.add(types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"))
     return kb
