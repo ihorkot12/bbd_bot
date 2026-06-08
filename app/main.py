@@ -131,10 +131,12 @@ def main() -> None:
     form_poller = FormPollerService(
         lead_service=leads_svc,
         leads_repo=repos.leads,
+        members_repo=repos.members,
         sheets_client=sheets_client,
         spreadsheet_id=cfg.spreadsheet_id,
         form_id=cfg.registration_form_id,
-        sheets_fallback=cfg.dry_run,
+        sheets_fallback=True,
+        target="members",
     )
     trial_form_poller = FormPollerService(
         lead_service=leads_svc,

@@ -560,6 +560,18 @@ def birthday_moderation_keyboard(member_id: str, year: int) -> types.InlineKeybo
     return kb
 
 
+def birthdays_menu() -> types.InlineKeyboardMarkup:
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        types.InlineKeyboardButton("🎂 Сьогодні", callback_data="bd:today"),
+        types.InlineKeyboardButton("📅 Найближчі 14 днів", callback_data="bd:upcoming"),
+        types.InlineKeyboardButton("📈 Покриття ДН", callback_data="bd:coverage"),
+        types.InlineKeyboardButton("📨 На модерацію", callback_data="bd:send"),
+    )
+    kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:back"))
+    return kb
+
+
 def pagination_keyboard(page: int, total_pages: int,
                          prefix: str) -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup(row_width=3)

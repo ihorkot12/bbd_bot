@@ -202,25 +202,24 @@ def register_handlers(
         if not form_sync_fn:
             bot.reply_to(message, "⚠️ Синхронізація форм тимчасово недоступна.")
             return
-        bot.send_message(message.from_user.id, "⏳ Синхронізую нові заявки з форм…")
+        bot.send_message(message.from_user.id, "⏳ Синхронізую нові записи з форм…")
         try:
             total = form_sync_fn()
         except Exception as e:
             log.error("Помилка ручної синхронізації форм: %s", e)
             bot.send_message(message.from_user.id, "⚠️ Не вдалося синхронізувати форми. Перевірте логи.")
             return
-        bot.send_message(message.from_user.id, f"✅ Синхронізація завершена. Нових заявок: <b>{total}</b>")
+        bot.send_message(message.from_user.id, f"✅ Синхронізація завершена. Оброблено записів: <b>{total}</b>")
 
     @bot.message_handler(commands=["birthdays"])
     def cmd_birthdays(message: types.Message):
         if not user_can(message.from_user.id, "mark_attendance") and get_user_role(message.from_user.id) not in (Role.OWNER, Role.ADMIN):
             bot.reply_to(message, "⛔ Тільки для тренера, адміністратора або власника.")
             return
-        count = birthday_svc.send_moderation_requests()
         bot.reply_to(
             message,
-            f"🎂 Надіслано привітань на модерацію: {count}\n\n"
-            + _birthday_coverage_text(repos.members.get_active()),
+            _birthday_dashboard_text(birthday_svc),
+            reply_markup=kb.birthdays_menu(),
         )
 
     # ── Owner operations ─────────────────────────────────────────────────────
@@ -589,13 +588,12 @@ def _handle_menu(bot, call, role, cfg, tg_id, birthday_svc, form_sync_fn):
         if role not in (Role.OWNER, Role.ADMIN, Role.COACH):
             bot.answer_callback_query(call.id, "⛔ Немає доступу", show_alert=True)
             return
-        count = birthday_svc.send_moderation_requests()
-        bot.answer_callback_query(call.id, f"🎂 На модерацію: {count}")
-        bot.send_message(
-            tg_id,
-            f"🎂 Перевірка днів народження виконана. На модерацію надіслано: {count}\n\n"
-            + _birthday_coverage_text(repos.members.get_active()),
-            reply_markup=kb.back_button(),
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(
+            _birthday_dashboard_text(birthday_svc),
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=kb.birthdays_menu(),
         )
     elif section == "digest":
         bot.answer_callback_query(call.id)
@@ -617,7 +615,7 @@ def _handle_menu(bot, call, role, cfg, tg_id, birthday_svc, form_sync_fn):
         bot.answer_callback_query(call.id, f"✅ Синхронізовано: {total}")
         bot.send_message(
             tg_id,
-            f"📥 Синхронізація форм завершена.\nНових заявок: <b>{total}</b>",
+            f"📥 Синхронізація форм завершена.\nОброблено записів: <b>{total}</b>",
             reply_markup=kb.back_button(),
         )
     else:
@@ -1426,7 +1424,45 @@ def _handle_events(bot, call, data, tg_id, events_svc):
 def _handle_birthdays(bot, call, data, tg_id, birthday_svc):
     parts = data.split(":")
     action = parts[1] if len(parts) > 1 else ""
-    if action == "publish" and len(parts) >= 4:
+    if not user_can(tg_id, "mark_attendance") and get_user_role(tg_id) not in (Role.OWNER, Role.ADMIN):
+        bot.answer_callback_query(call.id, "⛔ Немає доступу", show_alert=True)
+        return
+
+    if action == "today":
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(
+            _birthday_today_text(birthday_svc),
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=kb.birthdays_menu(),
+        )
+    elif action == "upcoming":
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(
+            _birthday_upcoming_text(birthday_svc),
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=kb.birthdays_menu(),
+        )
+    elif action == "coverage":
+        bot.answer_callback_query(call.id)
+        bot.edit_message_text(
+            _birthday_coverage_stats_text(birthday_svc.coverage_stats()),
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=kb.birthdays_menu(),
+        )
+    elif action == "send":
+        count = birthday_svc.send_moderation_requests()
+        bot.answer_callback_query(call.id, f"🎂 На модерацію: {count}")
+        bot.edit_message_text(
+            f"📨 <b>Модерація ДН</b>\n\nНадіслано привітань на модерацію: <b>{count}</b>\n\n"
+            + _birthday_today_text(birthday_svc),
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=kb.birthdays_menu(),
+        )
+    elif action == "publish" and len(parts) >= 4:
         member_id, year_raw = parts[2], parts[3]
         try:
             year = int(year_raw)
@@ -2014,7 +2050,7 @@ def _help_text(role: Role, cfg) -> str:
         base += (
             "\n<b>Для власника:</b>\n"
             "/ownerhelp — інструкція керування клубом із бота\n"
-            "/syncforms — вручну синхронізувати нові заявки з форм\n"
+            "/syncforms — вручну синхронізувати нові записи з форм\n"
         )
     return base
 
@@ -2255,6 +2291,75 @@ def _birthday_coverage_text(members: list[Member]) -> str:
     return "\n".join(lines)
 
 
+def _birthday_dashboard_text(birthday_svc) -> str:
+    today_items = birthday_svc.upcoming_birthdays(days=0)
+    pending_today = birthday_svc.todays_birthdays()
+    upcoming = birthday_svc.upcoming_birthdays(days=14)
+    stats = birthday_svc.coverage_stats()
+    enabled_today = [m for m in pending_today if m.birthday_greeting_enabled]
+    tomorrow_count = sum(1 for _, _, days_until in upcoming if days_until == 1)
+
+    return (
+        "🎂 <b>Дні народження</b>\n\n"
+        f"• Сьогодні: <b>{len(today_items)}</b>\n"
+        f"• Можна відправити на модерацію: <b>{len(enabled_today)}</b>\n"
+        f"• Завтра: <b>{tomorrow_count}</b>\n"
+        f"• Найближчі 14 днів: <b>{len(upcoming)}</b>\n"
+        f"• Без дати народження: <b>{len(stats['missing_birth'])}</b>\n\n"
+        "Оберіть дію нижче."
+    )
+
+
+def _birthday_today_text(birthday_svc) -> str:
+    items = birthday_svc.upcoming_birthdays(days=0)
+    if not items:
+        return "🎂 <b>Сьогодні ДН</b>\n\nНа сьогодні іменинників немає."
+    lines = ["🎂 <b>Сьогодні ДН</b>\n"]
+    for member, _, _ in items:
+        flags = []
+        flags.append("модерація увімкнена" if member.birthday_greeting_enabled else "привітання вимкнено")
+        if member.birthday_last_greeted_year == date.today().year:
+            flags.append("вже вітали цього року")
+        lines.append(f"• <b>{member.full_name}</b> — {', '.join(flags)}")
+    return "\n".join(lines)
+
+
+def _birthday_upcoming_text(birthday_svc, days: int = 14) -> str:
+    items = birthday_svc.upcoming_birthdays(days=days)
+    if not items:
+        return f"📅 <b>Найближчі {days} днів</b>\n\nДнів народження не знайдено."
+    lines = [f"📅 <b>Найближчі {days} днів</b>\n"]
+    for member, next_date, days_until in items[:30]:
+        when = "сьогодні" if days_until == 0 else "завтра" if days_until == 1 else f"через {days_until} дн."
+        status = "✅" if member.birthday_greeting_enabled else "⏸"
+        public_name = member.birthday_public_name or member.full_name.split()[0]
+        lines.append(
+            f"{status} <b>{next_date.strftime('%d.%m')}</b> — {member.full_name} "
+            f"({when}, публічно: {public_name})"
+        )
+    if len(items) > 30:
+        lines.append(f"…ще {len(items) - 30}")
+    return "\n".join(lines)
+
+
+def _birthday_coverage_stats_text(stats: dict) -> str:
+    lines = [
+        "📈 <b>Покриття ДН</b>",
+        f"• Активних учасників: <b>{stats['total']}</b>",
+        f"• Є дата народження: <b>{stats['with_birth_date']}</b>",
+        f"• Увімкнено привітання: <b>{stats['enabled']}</b>",
+        f"• Без дати народження: <b>{len(stats['missing_birth'])}</b>",
+        f"• Привітання вимкнено: <b>{len(stats['disabled'])}</b>",
+    ]
+    if stats["missing_birth"]:
+        lines.append("\n⚠️ Без дати народження:")
+        for member in stats["missing_birth"][:10]:
+            lines.append(f"• {member.full_name} (<code>{member.member_id}</code>)")
+        if len(stats["missing_birth"]) > 10:
+            lines.append(f"…ще {len(stats['missing_birth']) - 10}")
+    return "\n".join(lines)
+
+
 def _owner_help_text() -> str:
     return (
         "🧭 <b>Інструкція власника Black Bear Dojo Bot</b>\n\n"
@@ -2267,7 +2372,7 @@ def _owner_help_text() -> str:
         "<b>Форми</b>\n"
         "/trialform — короткий запис на пробне.\n"
         "/register — повна анкета учасника/батьків.\n"
-        "/syncforms — вручну підтягнути нові заявки з Google Forms.\n\n"
+        "/syncforms — вручну підтягнути нові записи з Google Forms/Sheets.\n\n"
         "<b>Учасники</b>\n"
         "/registermember — розширена практична анкета учасника (16 кроків).\n"
         "Найзручніше: натисніть <b>➕ Додати</b> → <b>Додати учасника покроково</b>. "
