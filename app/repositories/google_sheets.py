@@ -104,6 +104,7 @@ SHEET_HEADERS: Dict[str, List[str]] = {
 _SCOPES = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/forms.responses.readonly",
 ]
 
 
@@ -227,7 +228,7 @@ class SheetRepository:
     def _append_row(self, sheet_name: str, values: List[str]) -> None:
         """Додає новий рядок у кінець аркуша."""
         ws = self._get_sheet(sheet_name)
-        ws.append_row(values, value_input_option="USER_ENTERED")
+        ws.append_row(values, value_input_option="RAW")
 
     def _upsert(self, sheet_name: str, pk_col: str, pk_val: str,
                 row_dict: Dict[str, str]) -> None:

@@ -325,3 +325,89 @@ def test_registration_poller_reads_existing_registrations_sheet_format():
     assert "Плавання" in member.notes
     assert "Алергій немає" in member.notes
     assert worksheet.headers[-1] == "processed"
+
+
+def test_forms_api_registration_imports_member_and_skips_seen_response(monkeypatch):
+    creds = object()
+
+    form = {
+        "items": [
+            {"title": "Тип учасника", "questionItem": {"question": {"questionId": "q_type"}}},
+            {"title": "ПІБ дитини", "questionItem": {"question": {"questionId": "q_child"}}},
+            {"title": "Дата народження учасника", "questionItem": {"question": {"questionId": "q_birth"}}},
+            {"title": "ПІБ батька/матері або контактної особи", "questionItem": {"question": {"questionId": "q_parent"}}},
+            {"title": "Телефон для звʼязку", "questionItem": {"question": {"questionId": "q_phone"}}},
+            {"title": "Email батьків / дорослого учасника", "questionItem": {"question": {"questionId": "q_email"}}},
+            {"title": "Як підписувати учасника у привітанні?", "questionItem": {"question": {"questionId": "q_public_name"}}},
+            {"title": "Головна ціль тренувань", "questionItem": {"question": {"questionId": "q_goal"}}},
+        ]
+    }
+    responses_payload = {
+        "responses": [
+            {
+                "responseId": "forms-resp-1",
+                "createTime": "2026-06-09T10:00:00Z",
+                "answers": {
+                    "q_type": {"textAnswers": {"answers": [{"value": "Дитина"}]}},
+                    "q_child": {"textAnswers": {"answers": [{"value": "Софія Мельник"}]}},
+                    "q_birth": {"textAnswers": {"answers": [{"value": "2014-08-15"}]}},
+                    "q_parent": {"textAnswers": {"answers": [{"value": "Олена Мельник"}]}},
+                    "q_phone": {"textAnswers": {"answers": [{"value": "+380671112233"}]}},
+                    "q_email": {"textAnswers": {"answers": [{"value": "parent@example.com"}]}},
+                    "q_public_name": {"textAnswers": {"answers": [{"value": "Софія"}]}},
+                    "q_goal": {"textAnswers": {"answers": [{"value": "Дисципліна"}]}},
+                },
+            }
+        ]
+    }
+
+    class _Request:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def execute(self):
+            return self.payload
+
+    class _Responses:
+        def list(self, formId):
+            return _Request(responses_payload)
+
+    class _Forms:
+        def get(self, formId):
+            return _Request(form)
+
+        def responses(self):
+            return _Responses()
+
+    class _Service:
+        def forms(self):
+            return _Forms()
+
+    def fake_build(api_name, api_version, credentials):
+        return _Service()
+
+    _install_fake_googleapiclient(monkeypatch, fake_build)
+
+    members_repo = _FakeMemberRepo()
+    svc = FormPollerService(
+        lead_service=object(),
+        leads_repo=object(),
+        members_repo=members_repo,
+        sheets_client=SimpleNamespace(http_client=SimpleNamespace(auth=creds)),
+        form_id="form-id",
+        sheets_fallback=False,
+        target="members",
+    )
+
+    assert svc.poll_and_process() == 1
+    assert svc.poll_and_process() == 0
+
+    member = members_repo.get_all()[0]
+    assert member.full_name == "Софія Мельник"
+    assert member.birth_date == date(2014, 8, 15)
+    assert member.parent_name == "Олена Мельник"
+    assert member.parent_phone == "+380671112233"
+    assert member.parent_email == "parent@example.com"
+    assert member.birthday_public_name == "Софія"
+    assert "Форма: forms-resp-1" in member.notes
+    assert "Дисципліна" in member.notes

@@ -34,11 +34,11 @@ FORM_RESPONSES_SHEET = "form_responses"
 REGISTRATION_RESPONSES_SHEET = "registration_responses"
 FORM_RESPONSE_SHEET_CANDIDATES = (
     REGISTRATION_RESPONSES_SHEET,
-    "registrations",
-    FORM_RESPONSES_SHEET,
     "Form Responses 1",
     "Відповіді форми 1",
     "Ответы на форму 1",
+    "registrations",
+    FORM_RESPONSES_SHEET,
 )
 TARGET_LEADS = "leads"
 TARGET_MEMBERS = "members"
@@ -99,11 +99,7 @@ class FormPollerService:
         """
         if self._sheets_fallback:
             return self._poll_from_sheets()
-        if self._target == TARGET_MEMBERS:
-            log.info("FormPoller: повна реєстрація читається через Sheets fallback")
-            return self._poll_from_sheets()
-        else:
-            return self._poll_from_forms_api()
+        return self._poll_from_forms_api()
 
     # ── Sheets fallback (рекомендований режим) ────────────────────────────────
 
@@ -252,7 +248,8 @@ class FormPollerService:
                     join_date=date.today(),
                     birthday_greeting_enabled=common["birthday_enabled"],
                     birthday_public_name=_public_birthday_name(
-                        _first_value(row, _ALIASES["adult_birthday_public_name"]),
+                        _first_value(row, _ALIASES["adult_birthday_public_name"])
+                        or _first_value(row, _ALIASES["birthday_public_name"]),
                         full_name,
                     ),
                     photo_video_consent=common["photo_video_consent"] or None,
@@ -295,7 +292,8 @@ class FormPollerService:
                     join_date=date.today(),
                     birthday_greeting_enabled=common["birthday_enabled"],
                     birthday_public_name=_public_birthday_name(
-                        _first_value(row, _child_aliases(idx, "birthday_public_name")),
+                        _first_value(row, _child_aliases(idx, "birthday_public_name"))
+                        or _first_value(row, _ALIASES["birthday_public_name"]),
                         full_name,
                     ),
                     photo_video_consent=common["photo_video_consent"] or None,
@@ -394,6 +392,8 @@ class FormPollerService:
                 return self._poll_from_sheets()
 
             service = _build("forms", "v1", credentials=creds)
+            if self._target == TARGET_MEMBERS:
+                return self._poll_member_registrations_from_forms_api(service)
             resp = service.forms().responses().list(formId=self._form_id).execute()
             responses = resp.get("responses", [])
         except Exception as e:
@@ -417,6 +417,43 @@ class FormPollerService:
             self._last_processed = responses[0].get("responseId")
 
         return new_leads
+
+    def _poll_member_registrations_from_forms_api(self, service) -> int:
+        try:
+            form = service.forms().get(formId=self._form_id).execute()
+            question_titles = _question_titles_from_form(form)
+            resp = service.forms().responses().list(formId=self._form_id).execute()
+            responses = resp.get("responses", [])
+        except Exception as e:
+            log.warning("FormPoller: не вдалося прочитати повну реєстрацію через Forms API: %s", e)
+            return self._poll_from_sheets()
+
+        processed = 0
+        for response in responses:
+            response_id = response.get("responseId", "")
+            if not response_id or self._registration_response_seen(response_id):
+                continue
+
+            row = _registration_row_from_api_response(response, question_titles)
+            created = self._convert_registration_row_to_members(row, response_id)
+            if created:
+                processed += created
+                log.info(
+                    "FormPoller: Forms API імпортовано повну реєстрацію — %d учасн. (response_id=%s)",
+                    created,
+                    response_id,
+                )
+
+        return processed
+
+    def _registration_response_seen(self, response_id: str) -> bool:
+        if not self._members_repo or not response_id:
+            return False
+        marker = f"Форма: {response_id}"
+        for member in self._members_repo.get_all():
+            if marker in (member.notes or ""):
+                return True
+        return False
 
     def _get_forms_credentials(self):
         """Повертає google-auth credentials із різних версій gspread.Client."""
@@ -567,6 +604,8 @@ _ALIASES = {
     ),
     "parent_phone": (
         "parent_phone",
+        "Телефон для звʼязку",
+        "Телефон для зв'язку",
         "Телефон",
         "Номер телефону",
         "Контактний телефон",
@@ -575,6 +614,8 @@ _ALIASES = {
     ),
     "parent_email": (
         "parent_email",
+        "Email батьків / дорослого учасника",
+        "Email батьків",
         "Email",
         "Електронна пошта",
         "Пошта",
@@ -588,6 +629,7 @@ _ALIASES = {
     ),
     "parent_viber": (
         "parent_viber",
+        "Viber контакт",
         "Viber",
     ),
     "preferred_contact_channel": (
@@ -599,6 +641,7 @@ _ALIASES = {
     ),
     "emergency_contact": (
         "emergency_contact",
+        "Резервний телефон / друга контактна особа",
         "Екстрений контакт",
         "Кому дзвонити у разі потреби",
         "Додатковий телефон на випадок форс-мажору",
@@ -637,6 +680,7 @@ _ALIASES = {
         "preferred_group",
         "Бажана група",
         "Група",
+        "Бажана група або напрям",
         "Зручні дні/час тренувань",
         "Бажана група/напрям",
     ),
@@ -678,11 +722,13 @@ _ALIASES = {
     ),
     "training_goal": (
         "training_goal",
+        "Головна ціль тренувань",
         "Мета тренувань",
         "Що хочете отримати від тренувань?",
     ),
     "medical_notes": (
         "medical_notes",
+        "Важливі медичні або організаційні примітки",
         "Медичні примітки",
         "Здоров'я/обмеження",
         "Здоровʼя/обмеження",
@@ -691,6 +737,13 @@ _ALIASES = {
         "preferred_trial_date",
         "Бажана дата пробного",
         "Бажана дата першого тренування",
+    ),
+    "birthday_public_name": (
+        "birthday_public_name",
+        "Як підписувати учасника у привітанні?",
+        "Як підписувати учасника у привітанні з ДН?",
+        "Ім'я для привітання",
+        "Імʼя для привітання",
     ),
 }
 
@@ -734,6 +787,42 @@ _ADULT_NOTE_ALIASES = {
 }
 
 
+def _question_titles_from_form(form: dict) -> dict[str, str]:
+    titles: dict[str, str] = {}
+    for item in form.get("items", []):
+        title = str(item.get("title", "")).strip()
+        question = item.get("questionItem", {}).get("question", {})
+        question_id = str(question.get("questionId", "")).strip()
+        if question_id and title:
+            titles[question_id] = title
+    return titles
+
+
+def _registration_row_from_api_response(response: dict, question_titles: dict[str, str]) -> dict[str, str]:
+    response_id = str(response.get("responseId", "")).strip()
+    created_at = str(response.get("createTime", "")).strip()
+    row = {
+        "response_id": response_id,
+        "registration_id": response_id,
+        "submitted_at": created_at,
+        "created_at": created_at,
+        "source": "google_form",
+        "form_type": "full_registration",
+    }
+    for question_id, answer in response.get("answers", {}).items():
+        title = question_titles.get(question_id, question_id)
+        value = _api_answer_text(answer)
+        if title and value:
+            row[title] = value
+    return row
+
+
+def _api_answer_text(answer: dict) -> str:
+    text_answers = answer.get("textAnswers", {}).get("answers", [])
+    values = [str(item.get("value", "")).strip() for item in text_answers]
+    return "; ".join(value for value in values if value)
+
+
 def _normalize_key(value: object) -> str:
     text = str(value or "").strip().lower()
     text = text.replace("’", "'").replace("ʼ", "'").replace("`", "'")
@@ -756,7 +845,7 @@ def _first_value(row: dict, aliases: Sequence[str]) -> str:
         if len(alias_key) < 8:
             continue
         for key, value in normalized.items():
-            if alias_key in key or key in alias_key:
+            if alias_key in key:
                 return value
     return ""
 

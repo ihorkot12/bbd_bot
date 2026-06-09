@@ -135,7 +135,7 @@ def main() -> None:
         sheets_client=sheets_client,
         spreadsheet_id=cfg.spreadsheet_id,
         form_id=cfg.registration_form_id,
-        sheets_fallback=True,
+        sheets_fallback=False,
         target="members",
     )
     trial_form_poller = FormPollerService(
