@@ -462,6 +462,13 @@ def register_handlers(
                     return
                 _handle_templates(bot, call, data, templates_svc)
 
+            # ── Налаштування ────────────────────────────────────────────────
+            elif data.startswith("set:"):
+                if role not in (Role.OWNER, Role.ADMIN):
+                    bot.answer_callback_query(call.id, "⛔ Немає доступу", show_alert=True)
+                    return
+                _handle_settings(bot, call, data, cfg)
+
             elif data == "noop":
                 bot.answer_callback_query(call.id)
 
@@ -1994,6 +2001,44 @@ def _handle_templates(bot, call, data, templates_svc):
 
 
 # ── Утиліти ───────────────────────────────────────────────────────────────────
+
+def _handle_settings(bot, call, data, cfg):
+    action = data.split(":")[1] if ":" in data else ""
+    current = {
+        "pay_days": (
+            "Дні нагадувань про оплату",
+            ", ".join(str(day) for day in cfg.payment_reminder_days) or "не задано",
+            "PAYMENT_REMINDER_DAYS",
+        ),
+        "att_time": (
+            "Час нагадування тренеру",
+            cfg.attendance_reminder_time,
+            "ATTENDANCE_REMINDER_TIME",
+        ),
+        "att_deadline": (
+            "Дедлайн журналу",
+            cfg.attendance_deadline_time,
+            "ATTENDANCE_DEADLINE_TIME",
+        ),
+        "digest_time": (
+            "Час дайджесту",
+            cfg.digest_time,
+            "DIGEST_TIME",
+        ),
+    }
+    title, value, env_name = current.get(action, ("Налаштування", "невідомо", ""))
+    bot.answer_callback_query(call.id)
+    bot.edit_message_text(
+        f"⚙️ <b>{title}</b>\n\n"
+        f"Поточне значення: <b>{value}</b>\n\n"
+        "Щоб змінити це без ризику для продакшена, оновіть відповідну змінну в Railway Variables"
+        + (f": <code>{env_name}</code>." if env_name else ".")
+        + "\n\nПісля зміни треба перезапустити деплой.",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=kb.back_button("menu:settings"),
+    )
+
 
 def _trial_type_keyboard() -> types.InlineKeyboardMarkup:
     kb_obj = types.InlineKeyboardMarkup(row_width=1)

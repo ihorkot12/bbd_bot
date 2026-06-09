@@ -136,7 +136,7 @@ def payments_menu() -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton("📊 Статус оплат", callback_data="pay:status"),
         types.InlineKeyboardButton("⚠️ Боржники", callback_data="pay:debtors"),
         types.InlineKeyboardButton("🔔 Надіслати нагадування", callback_data="pay:remind"),
-        types.InlineKeyboardButton("✏️ Змінити статус", callback_data="pay:edit"),
+        types.InlineKeyboardButton("✏️ Змінити статус", callback_data="ops:set_payment"),
     )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:back"))
     return kb
@@ -150,7 +150,6 @@ def owner_operations_menu() -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton("🥋 Додати / редагувати групу покроково", callback_data="ops:add_group"),
         types.InlineKeyboardButton("👥 Редагувати учасників кнопками", callback_data="ops:edit_members"),
         types.InlineKeyboardButton("💰 Оновити оплату учасника", callback_data="ops:set_payment"),
-        types.InlineKeyboardButton("❄️ Заморозити абонемент (1 кнопка)", callback_data="ops:freeze_subscription"),
         types.InlineKeyboardButton("🧭 Інструкція власника", callback_data="menu:ownerhelp"),
         types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"),
     )
@@ -486,9 +485,6 @@ def events_menu() -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
         types.InlineKeyboardButton("📋 Список подій", callback_data="evt:list"),
-        types.InlineKeyboardButton("➕ Нова подія", callback_data="evt:new"),
-        types.InlineKeyboardButton("📢 Оголошення", callback_data="evt:announce"),
-        types.InlineKeyboardButton("🔔 Нагадування", callback_data="evt:remind"),
     )
     kb.add(types.InlineKeyboardButton("◀️ Назад", callback_data="menu:back"))
     return kb
