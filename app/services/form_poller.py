@@ -589,6 +589,7 @@ _ALIASES = {
     "registration_type": (
         "registration_type",
         "participant_type",
+        "Хто реєструється?",
         "Тип учасника",
         "Кого реєструєте?",
         "Хто заповнює форму?",
@@ -634,6 +635,8 @@ _ALIASES = {
     ),
     "preferred_contact_channel": (
         "preferred_contact_channel",
+        "Основний канал зв'язку",
+        "Основний канал звʼязку",
         "Зручний канал зв'язку",
         "Зручний канал звʼязку",
         "Канал зв'язку",
@@ -687,6 +690,7 @@ _ALIASES = {
     "birthday_greeting_consent": (
         "birthday_greeting_consent",
         "birthday_greeting_enabled",
+        "Чи можна вітати учасника з днем народження в каналі батьків?",
         "Чи можна вітати з днем народження?",
         "Вітати з днем народження в каналі батьків?",
         "Згода на привітання з ДН",
@@ -737,6 +741,8 @@ _ALIASES = {
         "preferred_trial_date",
         "Бажана дата пробного",
         "Бажана дата першого тренування",
+        "Бажана дата першого тренування / старту в групі",
+        "Бажана дата старту в групі",
     ),
     "birthday_public_name": (
         "birthday_public_name",
@@ -752,7 +758,7 @@ _CHILD_FIELD_ALIASES = {
     "birth_date": ("Дата народження", "ДН"),
     "school_class": ("Школа/клас", "Клас", "Вік/клас"),
     "previous_sport_experience": ("Попередній спортивний досвід", "Досвід спорту"),
-    "training_goal": ("Мета тренувань", "Що хочете отримати від тренувань?"),
+    "training_goal": ("Мета тренувань", "Головна ціль тренувань", "Що хочете отримати від тренувань?"),
     "medical_notes": ("Медичні примітки", "Здоров'я/обмеження", "Здоровʼя/обмеження"),
     "birthday_public_name": ("Ім'я для привітання", "Імʼя для привітання", "Як підписати у привітанні з ДН"),
 }
@@ -774,6 +780,7 @@ _ADULT_NOTE_ALIASES = {
         "adult_training_goal",
         "training_goal",
         "Мета тренувань дорослого учасника",
+        "Головна ціль тренувань",
         "Мета тренувань",
     ),
     "medical_notes": (
@@ -868,6 +875,15 @@ def _child_aliases(index: int, field: str) -> tuple[str, ...]:
                 f"{label} дитини {index}",
             )
         )
+        for total in (2, 3):
+            expanded.extend(
+                (
+                    f"Дитина {index} із {total}: {label}",
+                    f"Дитина {index} із {total} - {label}",
+                    f"Дитина {index} із {total} — {label}",
+                    f"{label} дитини {index} із {total}",
+                )
+            )
     return (*base, *expanded)
 
 
@@ -952,7 +968,7 @@ def _parse_date_text(value: object) -> Optional[date]:
     if not text:
         return None
     text = text.split(" ")[0]
-    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y"):
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y", "%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d-%m-%y", "%m/%d/%Y"):
         try:
             return datetime.strptime(text, fmt).date()
         except ValueError:

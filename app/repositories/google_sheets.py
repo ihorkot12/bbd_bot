@@ -108,6 +108,10 @@ _SCOPES = [
 ]
 
 
+def _sheet_date(value: Optional[date]) -> str:
+    return value.strftime("%d.%m.%Y") if value else ""
+
+
 # ── Базовий клас SheetRepository ─────────────────────────────────────────────
 
 class SheetRepository:
@@ -305,7 +309,7 @@ class GsMemberRepository(SheetRepository):
             "child_full_name": member.full_name if member.participant_type.value == "child" else "",
             "adult_full_name": member.full_name if member.participant_type.value == "adult" else "",
             "full_name": member.full_name,
-            "birth_date": str(member.birth_date or ""),
+            "birth_date": _sheet_date(member.birth_date),
             "birthday_month_day": member.birth_date.strftime("%m-%d") if member.birth_date else "",
             "birthday_greeting_enabled": "true" if member.birthday_greeting_enabled else "false",
             "birthday_public_name": member.birthday_public_name or "",
@@ -317,7 +321,7 @@ class GsMemberRepository(SheetRepository):
             "group_id": member.group_id or "",
             "active": "true" if member.active else "false",
             "belt": member.belt or "",
-            "join_date": str(member.join_date or ""),
+            "join_date": _sheet_date(member.join_date),
             "parent_phone": member.parent_phone or "",
             "parent_email": member.parent_email or "",
             "parent_telegram_username": member.parent_telegram_username or "",

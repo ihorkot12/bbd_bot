@@ -214,6 +214,43 @@ def test_registration_sheet_creates_members_for_multiple_children():
     assert worksheet.updated_cells[-1] == (2, worksheet.headers.index("processed") + 1, "true")
 
 
+def test_registration_sheet_understands_quiz_form_child_branches():
+    worksheet = _FakeWorksheet(
+        [
+            {
+                "response_id": "resp-quiz-2",
+                "processed": "",
+                "👋 Хто реєструється?": "👨‍👩‍👧 Батьки реєструють дитину/дітей",
+                "ПІБ батька/матері або контактної особи": "Ірина Мельник",
+                "Телефон для звʼязку": "+380671112233",
+                "Email батьків": "parent@example.com",
+                "Основний канал звʼязку": "Telegram",
+                "👧 Скільки дітей реєструєте?": "2 дитини",
+                "Дитина 1 із 2 — ПІБ": "Софія Мельник",
+                "Дитина 1 із 2 — дата народження": "15.08.2014",
+                "Дитина 1 із 2 — головна ціль тренувань": "Дисципліна і характер",
+                "Дитина 2 із 2 — ПІБ": "Марко Мельник",
+                "Дитина 2 із 2 — дата народження": "2017-09-20",
+                "Дитина 2 із 2 — медичні примітки": "Алергій немає",
+                "Чи можна вітати учасника з днем народження в каналі батьків?": "Так, можна 🎂",
+                "Бажана дата першого тренування / старту в групі": "01.09.2026",
+            }
+        ]
+    )
+    members_repo = _FakeMemberRepo()
+
+    processed = _registration_poller(worksheet, members_repo).poll_and_process()
+
+    members = sorted(members_repo.get_all(), key=lambda m: m.full_name)
+    assert processed == 2
+    assert [m.full_name for m in members] == ["Марко Мельник", "Софія Мельник"]
+    assert members[0].birth_date == date(2017, 9, 20)
+    assert members[1].birth_date == date(2014, 8, 15)
+    assert members[1].preferred_contact_channel == "Telegram"
+    assert members[1].birthday_greeting_enabled is True
+    assert "Бажана дата першого тренування: 01.09.2026" in members[1].notes
+
+
 def test_registration_sheet_creates_adult_member():
     worksheet = _FakeWorksheet(
         [

@@ -481,7 +481,7 @@ def _parse_date(value: object) -> Optional[date]:
     if not value or str(value).strip() == "":
         return None
     s = str(value).strip()
-    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y", "%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d-%m-%y"):
         try:
             return datetime.strptime(s, fmt).date()
         except ValueError:
