@@ -2,6 +2,7 @@ from datetime import date
 from unittest.mock import MagicMock
 
 from app import keyboards as kb
+from app.main import _notify_owner_about_todays_birthdays_after_form_sync
 from app.models import Member, ParticipantType
 from app.repositories.stub import build_stub_repositories
 from app.services.birthdays import BirthdayService
@@ -137,3 +138,64 @@ def test_birthdays_menu_has_explicit_send_action():
         "bd:send",
         "menu:back",
     ]
+
+
+def test_form_sync_notifies_owner_when_today_has_enabled_birthdays():
+    notifications = MagicMock()
+    birthday_svc = MagicMock()
+    birthday_svc.todays_birthdays.return_value = [
+        Member(
+            member_id="m_today",
+            full_name="Today Kid",
+            birth_date=date(2016, 6, 10),
+            participant_type=ParticipantType.CHILD,
+            birthday_greeting_enabled=True,
+            active=True,
+        ),
+        Member(
+            member_id="m_disabled",
+            full_name="Disabled Kid",
+            birth_date=date(2016, 6, 10),
+            participant_type=ParticipantType.CHILD,
+            birthday_greeting_enabled=False,
+            active=True,
+        ),
+    ]
+
+    _notify_owner_about_todays_birthdays_after_form_sync(
+        birthday_svc=birthday_svc,
+        notifications=notifications,
+        owner_chat_id=329214126,
+        imported_count=2,
+    )
+
+    notifications.send_to_owner.assert_called_once()
+    args = notifications.send_to_owner.call_args.args
+    assert args[0] == 329214126
+    assert "Today Kid" in args[1]
+    assert "Disabled Kid" not in args[1]
+    assert "Імпортовано нових записів: <b>2</b>" in args[1]
+
+
+def test_form_sync_does_not_notify_without_enabled_birthdays():
+    notifications = MagicMock()
+    birthday_svc = MagicMock()
+    birthday_svc.todays_birthdays.return_value = [
+        Member(
+            member_id="m_disabled",
+            full_name="Disabled Kid",
+            birth_date=date(2016, 6, 10),
+            participant_type=ParticipantType.CHILD,
+            birthday_greeting_enabled=False,
+            active=True,
+        )
+    ]
+
+    _notify_owner_about_todays_birthdays_after_form_sync(
+        birthday_svc=birthday_svc,
+        notifications=notifications,
+        owner_chat_id=329214126,
+        imported_count=1,
+    )
+
+    notifications.send_to_owner.assert_not_called()

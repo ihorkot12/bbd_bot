@@ -248,7 +248,7 @@ def test_registration_sheet_understands_quiz_form_child_branches():
     assert members[1].birth_date == date(2014, 8, 15)
     assert members[1].preferred_contact_channel == "Telegram"
     assert members[1].birthday_greeting_enabled is True
-    assert "Бажана група/час: Дорослі, тестова група" in members[1].notes
+    assert "Поточна група/час: Дорослі, тестова група" in members[1].notes
 
 
 def test_registration_sheet_creates_adult_member():

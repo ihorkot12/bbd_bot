@@ -36,6 +36,21 @@ def make_payment(
     )
 
 
+def test_member_from_row_reads_parent_full_name_fallback():
+    member = Member.from_row(
+        {
+            "member_id": "m-parent",
+            "full_name": "Тестова Дитина Codex",
+            "birth_date": "15.03.2016",
+            "participant_type": "child",
+            "parent_full_name": "Тестова Мама Codex",
+            "parent_phone": "+380501112233",
+        }
+    )
+
+    assert member.parent_name == "Тестова Мама Codex"
+
+
 # ── select_debtors_for_reminder ───────────────────────────────────────────────
 
 class TestSelectDebtorsForReminder:

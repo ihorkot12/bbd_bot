@@ -147,6 +147,20 @@ def main() -> None:
         sheets_fallback=cfg.dry_run,
     )
 
+    def sync_member_registration_forms() -> int:
+        processed = form_poller.poll_and_process()
+        if processed:
+            _notify_owner_about_todays_birthdays_after_form_sync(
+                birthday_svc=birthday_svc,
+                notifications=notifications,
+                owner_chat_id=cfg.owner_chat_id,
+                imported_count=processed,
+            )
+        return processed
+
+    def sync_all_forms() -> int:
+        return sync_member_registration_forms() + trial_form_poller.poll_and_process()
+
     # ── 5. Реєстр ролей ───────────────────────────────────────────────────────
     from app import access
     try:
@@ -198,7 +212,7 @@ def main() -> None:
     try:
         from apscheduler.triggers.interval import IntervalTrigger
         scheduler._scheduler.add_job(
-            form_poller.poll_and_process,
+            sync_member_registration_forms,
             IntervalTrigger(minutes=cfg.form_poll_interval_minutes),
             id="form_poller",
             name="Опитування Google Form",
@@ -234,10 +248,7 @@ def main() -> None:
         birthday_svc=birthday_svc,
         templates_svc=templates_svc,
         notifications=notifications,
-        form_sync_fn=lambda: (
-            form_poller.poll_and_process() +
-            trial_form_poller.poll_and_process()
-        ),
+        form_sync_fn=sync_all_forms,
     )
 
     # ── Graceful shutdown ─────────────────────────────────────────────────────
@@ -288,6 +299,36 @@ def _build_stub_repos():
     from app.repositories.base import Repositories
     from app.repositories.stub import build_stub_repositories
     return build_stub_repositories()
+
+
+def _notify_owner_about_todays_birthdays_after_form_sync(
+    *,
+    birthday_svc,
+    notifications,
+    owner_chat_id: int,
+    imported_count: int,
+) -> None:
+    enabled_today = [
+        member
+        for member in birthday_svc.todays_birthdays()
+        if member.birthday_greeting_enabled
+    ]
+    if not enabled_today:
+        return
+    names = ", ".join(member.full_name for member in enabled_today[:8])
+    if len(enabled_today) > 8:
+        names += f" та ще {len(enabled_today) - 8}"
+    notifications.send_to_owner(
+        owner_chat_id,
+        (
+            "🎂 <b>Після синхронізації форми є ДН сьогодні</b>\n\n"
+            f"Імпортовано нових записів: <b>{imported_count}</b>\n"
+            f"Сьогодні можна відправити на модерацію: <b>{len(enabled_today)}</b>\n"
+            f"{names}\n\n"
+            "Відкрийте /birthdays → <b>📨 На модерацію</b>, "
+            "щоб перевірити текст перед публікацією."
+        ),
+    )
 
 
 if __name__ == "__main__":

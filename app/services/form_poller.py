@@ -937,8 +937,8 @@ def _registration_notes(
 
     contact = _registration_contact_from_row(row)
     _append_note(parts, "Екстрений контакт", contact.emergency_contact)
-    _append_note(parts, "Бажана група/час", _first_value(row, _ALIASES["preferred_group"]))
-    _append_note(parts, "Бажана дата першого тренування", _first_value(row, _ALIASES["preferred_trial_date"]))
+    _append_note(parts, "Поточна група/час", _first_value(row, _ALIASES["preferred_group"]))
+    _append_note(parts, "Дата з форми", _first_value(row, _ALIASES["preferred_trial_date"]))
     _append_note(parts, "Згода на обробку даних", _first_value(row, _ALIASES["data_processing_consent"]))
     _append_note(parts, "Коментар", _first_value(row, _ALIASES["notes"]))
     return " | ".join(parts)

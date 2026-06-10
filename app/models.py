@@ -160,7 +160,7 @@ class Member:
                 ParticipantType, row.get("participant_type"), ParticipantType.CHILD
             ),
             parent_telegram_id=_int_or_none(row.get("parent_telegram_id")),
-            parent_name=row.get("parent_name") or None,
+            parent_name=row.get("parent_name") or row.get("parent_full_name") or None,
             parent_phone=row.get("parent_phone") or None,
             parent_email=row.get("parent_email") or None,
             parent_telegram_username=row.get("parent_telegram_username") or None,
