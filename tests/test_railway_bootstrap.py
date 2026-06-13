@@ -21,6 +21,24 @@ def test_railway_credentials_force_real_data_mode(monkeypatch, tmp_path):
     assert main.os.environ["GOOGLE_CREDENTIALS_FILE"] == str(target)
 
 
+def test_railway_accepts_google_service_account_json_alias(monkeypatch, tmp_path):
+    target = tmp_path / "credentials.json"
+    monkeypatch.setattr(main, "ROOT", tmp_path)
+    monkeypatch.setenv("RAILWAY_PROJECT_ID", "project")
+    monkeypatch.setenv("DRY_RUN", "true")
+    monkeypatch.delenv("GOOGLE_CREDENTIALS_JSON", raising=False)
+    monkeypatch.setenv(
+        "GOOGLE_SERVICE_ACCOUNT_JSON",
+        '{"type":"service_account","project_id":"alias-test"}',
+    )
+
+    main._materialize_google_credentials()
+
+    assert target.exists()
+    assert main.os.environ["DRY_RUN"] == "false"
+    assert main.os.environ["GOOGLE_CREDENTIALS_FILE"] == str(target)
+
+
 def test_railway_without_credentials_fails_instead_of_using_test_data(
     monkeypatch, tmp_path
 ):

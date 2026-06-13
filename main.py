@@ -140,22 +140,36 @@ def _materialize_google_credentials() -> None:
         _enable_real_data_mode()
         return
 
-    raw_json = os.getenv("GOOGLE_CREDENTIALS_JSON", "").strip()
-    raw_b64 = os.getenv("GOOGLE_CREDENTIALS_JSON_BASE64", "").strip()
-    file_hint = os.getenv("GOOGLE_CREDENTIALS_FILE", "").strip()
+    json_env_names = (
+        "GOOGLE_CREDENTIALS_JSON",
+        "GOOGLE_SERVICE_ACCOUNT_JSON",
+        "GOOGLE_APPLICATION_CREDENTIALS_JSON",
+        "GCP_SERVICE_ACCOUNT_JSON",
+    )
+    b64_env_names = tuple(f"{name}_BASE64" for name in json_env_names) + (
+        "GOOGLE_CREDENTIALS_JSON_BASE64",
+    )
+    file_env_names = ("GOOGLE_CREDENTIALS_FILE", "GOOGLE_APPLICATION_CREDENTIALS")
 
     payload_candidates: list[str] = []
-    if raw_b64:
+    for env_name in b64_env_names:
+        raw_b64 = os.getenv(env_name, "").strip()
+        if not raw_b64:
+            continue
         try:
             payload_candidates.append(
                 base64.b64decode(raw_b64, validate=True).decode("utf-8")
             )
         except Exception:
             pass
-    if raw_json:
-        payload_candidates.append(raw_json)
-    if file_hint.startswith("{"):
-        payload_candidates.append(file_hint)
+    for env_name in json_env_names:
+        raw_json = os.getenv(env_name, "").strip()
+        if raw_json:
+            payload_candidates.append(raw_json)
+    for env_name in file_env_names:
+        file_hint = os.getenv(env_name, "").strip()
+        if file_hint.startswith("{"):
+            payload_candidates.append(file_hint)
 
     fallback_payload = ""
     for payload in payload_candidates:
@@ -177,7 +191,10 @@ def _materialize_google_credentials() -> None:
         _enable_real_data_mode()
         return
 
-    if file_hint:
+    for env_name in file_env_names:
+        file_hint = os.getenv(env_name, "").strip()
+        if not file_hint:
+            continue
         hinted = Path(file_hint)
         if not hinted.is_absolute():
             hinted = ROOT / file_hint
