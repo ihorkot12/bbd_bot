@@ -58,18 +58,13 @@ def attendance_id_token(value: str) -> str:
 def main_menu_owner() -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        types.InlineKeyboardButton("💰 Оплати", callback_data="menu:payments"),
         types.InlineKeyboardButton("📋 Відвідуваність", callback_data="menu:attendance"),
-        types.InlineKeyboardButton("➕ Додати", callback_data="ops:menu"),
-        types.InlineKeyboardButton("👥 Учні", callback_data="menu:members"),
-        types.InlineKeyboardButton("🔍 Ліди / Проби", callback_data="menu:leads"),
-        types.InlineKeyboardButton("📅 Події", callback_data="menu:events"),
+        types.InlineKeyboardButton("🧾 Портал реєстрації", callback_data="menu:registration"),
         types.InlineKeyboardButton("🎂 Дні народження", callback_data="menu:birthdays"),
-        types.InlineKeyboardButton("📊 Дайджест", callback_data="menu:digest"),
-        types.InlineKeyboardButton("🧭 Інструкція", callback_data="menu:ownerhelp"),
-        types.InlineKeyboardButton("✉️ Шаблони", callback_data="menu:templates"),
-        types.InlineKeyboardButton("⚙️ Налаштування", callback_data="menu:settings"),
-        types.InlineKeyboardButton("📥 Оновити форми", callback_data="menu:formsync"),
+        types.InlineKeyboardButton("📥 Синхронізувати форми", callback_data="menu:formsync"),
+        types.InlineKeyboardButton("👥 Учні", callback_data="menu:members"),
+        types.InlineKeyboardButton("➕ Додати / редагувати", callback_data="ops:menu"),
+        types.InlineKeyboardButton("🧭 Допомога", callback_data="menu:ownerhelp"),
     )
     return kb
 
@@ -77,16 +72,13 @@ def main_menu_owner() -> types.InlineKeyboardMarkup:
 def main_menu_admin() -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        types.InlineKeyboardButton("💰 Оплати", callback_data="menu:payments"),
         types.InlineKeyboardButton("📋 Відвідуваність", callback_data="menu:attendance"),
-        types.InlineKeyboardButton("➕ Додати", callback_data="ops:menu"),
-        types.InlineKeyboardButton("👥 Учні", callback_data="menu:members"),
-        types.InlineKeyboardButton("🔍 Ліди / Проби", callback_data="menu:leads"),
-        types.InlineKeyboardButton("📅 Події", callback_data="menu:events"),
+        types.InlineKeyboardButton("🧾 Портал реєстрації", callback_data="menu:registration"),
         types.InlineKeyboardButton("🎂 Дні народження", callback_data="menu:birthdays"),
-        types.InlineKeyboardButton("🧭 Інструкція", callback_data="menu:ownerhelp"),
-        types.InlineKeyboardButton("✉️ Шаблони", callback_data="menu:templates"),
-        types.InlineKeyboardButton("📥 Оновити форми", callback_data="menu:formsync"),
+        types.InlineKeyboardButton("📥 Синхронізувати форми", callback_data="menu:formsync"),
+        types.InlineKeyboardButton("👥 Учні", callback_data="menu:members"),
+        types.InlineKeyboardButton("➕ Додати / редагувати", callback_data="ops:menu"),
+        types.InlineKeyboardButton("🧭 Допомога", callback_data="menu:ownerhelp"),
     )
     return kb
 
@@ -95,10 +87,8 @@ def main_menu_coach() -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
         types.InlineKeyboardButton("📋 Відвідуваність", callback_data="menu:attendance"),
-        types.InlineKeyboardButton("➕ Додати", callback_data="ops:menu"),
+        types.InlineKeyboardButton("🧾 Портал реєстрації", callback_data="menu:registration"),
         types.InlineKeyboardButton("👥 Мої учні", callback_data="menu:members"),
-        types.InlineKeyboardButton("🔍 Ліди", callback_data="menu:leads"),
-        types.InlineKeyboardButton("📅 Події", callback_data="menu:events"),
         types.InlineKeyboardButton("🎂 Привітання ДН", callback_data="menu:birthdays"),
     )
     return kb
@@ -107,9 +97,9 @@ def main_menu_coach() -> types.InlineKeyboardMarkup:
 def main_menu_parent() -> types.InlineKeyboardMarkup:
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        types.InlineKeyboardButton("💰 Моя оплата", callback_data="menu:my_payment"),
+        types.InlineKeyboardButton("🧾 Реєстрація учасника", callback_data="menu:registration"),
         types.InlineKeyboardButton("📋 Відвідуваність дитини", callback_data="menu:my_attendance"),
-        types.InlineKeyboardButton("📅 Розклад / події", callback_data="menu:events"),
+        types.InlineKeyboardButton("📅 Розклад", callback_data="menu:schedule"),
         types.InlineKeyboardButton("📞 Контакти", callback_data="menu:contact"),
     )
     return kb
@@ -121,8 +111,6 @@ def main_menu_guest() -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton("🥋 Запис на пробне", callback_data="menu:trial_request"),
         types.InlineKeyboardButton("📋 Реєстрація учасника", callback_data="menu:registration"),
         types.InlineKeyboardButton("📅 Розклад", callback_data="menu:schedule"),
-        types.InlineKeyboardButton("💰 Вартість", callback_data="menu:price"),
-        types.InlineKeyboardButton("📍 Адреса", callback_data="menu:address"),
         types.InlineKeyboardButton("📞 Контакти", callback_data="menu:contact"),
     )
     return kb
@@ -551,6 +539,26 @@ def birthday_moderation_keyboard(member_id: str, year: int) -> types.InlineKeybo
     kb.add(
         types.InlineKeyboardButton("✅ Опублікувати в канал батьків", callback_data=f"bd:publish:{member_id}:{year}"),
         types.InlineKeyboardButton("✏️ Не публікувати / вручну змінити", callback_data=f"bd:skip:{member_id}:{year}"),
+        types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"),
+    )
+    return kb
+
+
+def registration_portal_menu(registration_url: str) -> types.InlineKeyboardMarkup:
+    """Окремий портал для внесення чинного учасника в базу клубу."""
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    kb.add(
+        types.InlineKeyboardButton("🧾 Відкрити портал реєстрації учасника", url=registration_url),
+        types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"),
+    )
+    return kb
+
+
+def trial_portal_menu(trial_url: str) -> types.InlineKeyboardMarkup:
+    """Окрема форма для заявки на пробне тренування."""
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    kb.add(
+        types.InlineKeyboardButton("🥋 Відкрити форму запису на пробне", url=trial_url),
         types.InlineKeyboardButton("🏠 Головне меню", callback_data="menu:back"),
     )
     return kb

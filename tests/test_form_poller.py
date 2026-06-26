@@ -263,6 +263,8 @@ def test_registration_sheet_creates_adult_member():
                 "parent_phone": "+380671234567",
                 "parent_email": "adult@example.com",
                 "birthday_greeting_consent": "ні",
+                "adult_occupation": "Підприємець",
+                "adult_previous_sport_experience": "Футбол",
                 "adult_training_goal": "Форма і витривалість",
             }
         ]
@@ -280,6 +282,8 @@ def test_registration_sheet_creates_adult_member():
     assert member.parent_phone == "+380671234567"
     assert member.birthday_greeting_enabled is False
     assert "Форма і витривалість" in member.notes
+    assert "Підприємець" not in member.notes
+    assert "Футбол" not in member.notes
 
 
 def test_registration_sheet_updates_existing_member_instead_of_duplicate():
@@ -328,7 +332,7 @@ def test_registration_poller_reads_existing_registrations_sheet_format():
                 "child_full_name": "Марко Іваненко",
                 "birth_date": "2016-09-20",
                 "birthday_greeting_enabled": "true",
-                "birthday_public_name": "Марко",
+                "birthday_public_name": "Марчик",
                 "photo_video_consent": "yes",
                 "parent_full_name": "Ірина Іваненко",
                 "parent_phone": "+380501112233",
@@ -375,7 +379,6 @@ def test_forms_api_registration_imports_member_and_skips_seen_response(monkeypat
             {"title": "ПІБ батька/матері або контактної особи", "questionItem": {"question": {"questionId": "q_parent"}}},
             {"title": "Телефон для звʼязку", "questionItem": {"question": {"questionId": "q_phone"}}},
             {"title": "Email батьків / дорослого учасника", "questionItem": {"question": {"questionId": "q_email"}}},
-            {"title": "Як підписувати учасника у привітанні?", "questionItem": {"question": {"questionId": "q_public_name"}}},
             {"title": "Головна ціль тренувань", "questionItem": {"question": {"questionId": "q_goal"}}},
         ]
     }
@@ -391,7 +394,6 @@ def test_forms_api_registration_imports_member_and_skips_seen_response(monkeypat
                     "q_parent": {"textAnswers": {"answers": [{"value": "Олена Мельник"}]}},
                     "q_phone": {"textAnswers": {"answers": [{"value": "+380671112233"}]}},
                     "q_email": {"textAnswers": {"answers": [{"value": "parent@example.com"}]}},
-                    "q_public_name": {"textAnswers": {"answers": [{"value": "Софія"}]}},
                     "q_goal": {"textAnswers": {"answers": [{"value": "Дисципліна"}]}},
                 },
             }

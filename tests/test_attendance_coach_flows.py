@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock
 from zoneinfo import ZoneInfo
 
-from app.models import AttendanceRecord, AttendanceStatus, Group, Member, ParticipantType
+from app.models import AttendanceRecord, AttendanceStatus, Group, Member, ParticipantType, ReminderType
 from app.repositories.stub import build_stub_repositories
 from app.services.attendance import AttendanceService
 
@@ -266,3 +266,75 @@ def test_absence_followup_candidates_include_only_two_plus_recent_absences():
     assert [(member.member_id, count, group.group_id) for member, count, group in candidates] == [
         ("m_two", 2, "kids_d")
     ]
+
+
+def test_unclosed_journal_alert_is_logged_with_stable_target():
+    repos, notifications, svc = _build_service()
+    notifications.send_to_owner.return_value = True
+    notifications.was_recently_sent.return_value = False
+    repos.groups.upsert(
+        Group(
+            group_id="kids_unclosed",
+            name="Kids Unclosed",
+            coach_telegram_id=444,
+            schedule="ср 18:00-19:00",
+            attendance_reminder_time="18:00",
+            attendance_deadline_time="20:00",
+            active=True,
+        )
+    )
+    lesson_date = date(2026, 6, 12)
+
+    assert svc.check_unclosed_journals(lesson_date) == 1
+
+    notifications.was_recently_sent.assert_called_once_with(
+        ReminderType.ATTENDANCE,
+        "unclosed_journal:kids_unclosed:2026-06-12",
+        hours=24,
+        chat_id=329214126,
+    )
+    notifications.send_to_owner.assert_called_once()
+    assert notifications.send_to_owner.call_args.kwargs["reminder_type"] == ReminderType.ATTENDANCE
+    assert notifications.send_to_owner.call_args.kwargs["target_id"] == "unclosed_journal:kids_unclosed:2026-06-12"
+
+
+def test_unclosed_journal_alert_skips_recent_duplicate():
+    repos, notifications, svc = _build_service()
+    notifications.was_recently_sent.return_value = True
+    repos.groups.upsert(
+        Group(
+            group_id="kids_unclosed",
+            name="Kids Unclosed",
+            coach_telegram_id=444,
+            schedule="ср 18:00-19:00",
+            attendance_reminder_time="18:00",
+            attendance_deadline_time="20:00",
+            active=True,
+        )
+    )
+
+    assert svc.check_unclosed_journals(date(2026, 6, 12)) == 1
+    notifications.send_to_owner.assert_not_called()
+
+
+def test_inactivity_critical_alert_skips_recent_duplicate_for_week():
+    repos, notifications, svc = _build_service()
+    notifications.was_recently_sent.return_value = True
+    repos.members.upsert(
+        Member(
+            member_id="m_inactive",
+            full_name="Inactive Kid",
+            birth_date=date(2016, 1, 1),
+            participant_type=ParticipantType.CHILD,
+            active=True,
+        )
+    )
+
+    assert svc.send_inactivity_alerts() == {21: 0, 14: 0, 7: 0}
+    notifications.was_recently_sent.assert_called_once_with(
+        ReminderType.INACTIVITY,
+        "inactivity:m_inactive:21",
+        hours=168,
+        chat_id=329214126,
+    )
+    notifications.send_to_owner.assert_not_called()

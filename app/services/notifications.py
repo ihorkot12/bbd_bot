@@ -109,9 +109,43 @@ class NotificationService:
         text: str,
         parse_mode: str = "HTML",
         reply_markup=None,
+        *,
+        reminder_type: Optional[ReminderType] = None,
+        target_id: str = "",
     ) -> bool:
         """Зручний метод для надсилання власнику."""
-        return self.send(owner_chat_id, text, parse_mode=parse_mode, reply_markup=reply_markup)
+        return self.send(
+            owner_chat_id,
+            text,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+            reminder_type=reminder_type,
+            target_id=target_id,
+        )
+
+    def was_recently_sent(
+        self,
+        reminder_type: ReminderType,
+        target_id: str,
+        *,
+        hours: int = 24,
+        chat_id: Optional[int] = None,
+    ) -> bool:
+        """Повертає True, якщо таке нагадування вже було недавно."""
+        if not target_id:
+            return False
+        try:
+            entries = self._reminder_log.get_recent(
+                target_id=target_id,
+                reminder_type=reminder_type,
+                hours=hours,
+            )
+            if chat_id is not None:
+                entries = [entry for entry in entries if entry.sent_to == chat_id]
+            return bool(entries)
+        except Exception as e:
+            log.warning("Помилка перевірки reminders_log: %s", e)
+            return False
 
     def answer_callback(self, call: telebot.types.CallbackQuery,
                         text: str, show_alert: bool = False) -> None:

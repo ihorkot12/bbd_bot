@@ -35,6 +35,8 @@ log = logging.getLogger(__name__)
 
 # Порогові значення неактивності (дні)
 INACTIVITY_THRESHOLDS = [7, 14, 21]
+UNCLOSED_JOURNAL_ALERT_COOLDOWN_HOURS = 24
+INACTIVITY_ALERT_COOLDOWN_HOURS = 24 * 7
 
 
 class AttendanceService:
@@ -481,6 +483,18 @@ class AttendanceService:
         for group in groups:
             if not self.is_journal_closed(group.group_id, lesson_date):
                 unclosed += 1
+                target_id = f"unclosed_journal:{group.group_id}:{lesson_date.isoformat()}"
+                if self._owner_alert_recently_sent(
+                    ReminderType.ATTENDANCE,
+                    target_id,
+                    hours=UNCLOSED_JOURNAL_ALERT_COOLDOWN_HOURS,
+                ):
+                    log.info(
+                        "Пропускаю повторний алерт незакритого журналу: група '%s' за %s",
+                        group.name,
+                        lesson_date,
+                    )
+                    continue
                 # Знаходимо ім'я тренера
                 coach_name = f"ID {group.coach_telegram_id}" if group.coach_telegram_id else "Невідомий"
                 text = self._templates.render(
@@ -489,7 +503,12 @@ class AttendanceService:
                     lesson_date=lesson_date.strftime("%d.%m.%Y"),
                     coach_name=coach_name,
                 )
-                self._notifications.send_to_owner(self._owner_chat_id, text)
+                self._notifications.send_to_owner(
+                    self._owner_chat_id,
+                    text,
+                    reminder_type=ReminderType.ATTENDANCE,
+                    target_id=target_id,
+                )
                 log.warning("Незакритий журнал: група '%s' за %s", group.name, lesson_date)
 
         return unclosed
@@ -548,13 +567,31 @@ class AttendanceService:
                 if member.member_id in processed_members:
                     continue
                 if days_absent >= threshold:
+                    target_id = f"inactivity:{member.member_id}:{threshold}"
+                    if self._owner_alert_recently_sent(
+                        ReminderType.INACTIVITY,
+                        target_id,
+                        hours=INACTIVITY_ALERT_COOLDOWN_HOURS,
+                    ):
+                        processed_members.add(member.member_id)
+                        log.info(
+                            "Пропускаю повторний алерт неактивності: member=%s threshold=%d",
+                            member.member_id,
+                            threshold,
+                        )
+                        continue
                     tmpl_name = f"inactivity_{threshold}_days"
                     text = self._templates.render(
                         tmpl_name,
                         child_name=member.full_name,
                         days=days_absent,
                     )
-                    ok = self._notifications.send_to_owner(self._owner_chat_id, text)
+                    ok = self._notifications.send_to_owner(
+                        self._owner_chat_id,
+                        text,
+                        reminder_type=ReminderType.INACTIVITY,
+                        target_id=target_id,
+                    )
                     if ok:
                         count += 1
                         processed_members.add(member.member_id)
@@ -563,6 +600,30 @@ class AttendanceService:
             log.info("Неактивних (>=%d днів): %d сповіщень", threshold, count)
 
         return results
+
+    def _owner_alert_recently_sent(
+        self,
+        reminder_type: ReminderType,
+        target_id: str,
+        *,
+        hours: int,
+    ) -> bool:
+        checker = getattr(self._notifications, "was_recently_sent", None)
+        if not callable(checker):
+            return False
+        try:
+            result = checker(
+                reminder_type,
+                target_id,
+                hours=hours,
+                chat_id=self._owner_chat_id,
+            )
+        except TypeError:
+            result = checker(reminder_type, target_id, hours=hours)
+        except Exception as e:
+            log.warning("Не вдалося перевірити антиспам reminders_log: %s", e)
+            return False
+        return result is True
 
     def get_attendance_summary(self, group_id: str, lesson_date: date) -> str:
         """Повертає текстовий звіт по журналу групи."""

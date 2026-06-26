@@ -247,11 +247,7 @@ class FormPollerService:
                     active=True,
                     join_date=date.today(),
                     birthday_greeting_enabled=common["birthday_enabled"],
-                    birthday_public_name=_public_birthday_name(
-                        _first_value(row, _ALIASES["adult_birthday_public_name"])
-                        or _first_value(row, _ALIASES["birthday_public_name"]),
-                        full_name,
-                    ),
+                    birthday_public_name=_public_birthday_name("", full_name),
                     photo_video_consent=common["photo_video_consent"] or None,
                     registration_source=RegistrationSource.GOOGLE_FORM.value,
                     notes=notes,
@@ -291,11 +287,7 @@ class FormPollerService:
                     active=True,
                     join_date=date.today(),
                     birthday_greeting_enabled=common["birthday_enabled"],
-                    birthday_public_name=_public_birthday_name(
-                        _first_value(row, _child_aliases(idx, "birthday_public_name"))
-                        or _first_value(row, _ALIASES["birthday_public_name"]),
-                        full_name,
-                    ),
+                    birthday_public_name=_public_birthday_name("", full_name),
                     photo_video_consent=common["photo_video_consent"] or None,
                     registration_source=RegistrationSource.GOOGLE_FORM.value,
                     notes=notes,
@@ -673,12 +665,6 @@ _ALIASES = {
         "Дата народження учасника",
         "Дата народження",
     ),
-    "adult_birthday_public_name": (
-        "adult_birthday_public_name",
-        "Як підписати дорослого у привітанні з ДН",
-        "Ім'я для привітання дорослого",
-        "Імʼя для привітання дорослого",
-    ),
     "preferred_group": (
         "preferred_group",
         "Поточна група або час тренувань",
@@ -747,13 +733,6 @@ _ALIASES = {
         "Бажана дата першого тренування / старту в групі",
         "Бажана дата старту в групі",
     ),
-    "birthday_public_name": (
-        "birthday_public_name",
-        "Як підписувати учасника у привітанні?",
-        "Як підписувати учасника у привітанні з ДН?",
-        "Ім'я для привітання",
-        "Імʼя для привітання",
-    ),
 }
 
 _CHILD_FIELD_ALIASES = {
@@ -763,22 +742,9 @@ _CHILD_FIELD_ALIASES = {
     "previous_sport_experience": ("Попередній спортивний досвід", "Досвід спорту"),
     "training_goal": ("Мета тренувань", "Головна ціль тренувань", "Що хочете отримати від тренувань?"),
     "medical_notes": ("Медичні примітки", "Здоров'я/обмеження", "Здоровʼя/обмеження"),
-    "birthday_public_name": ("Ім'я для привітання", "Імʼя для привітання", "Як підписати у привітанні з ДН"),
 }
 
 _ADULT_NOTE_ALIASES = {
-    "school_class": (
-        "adult_occupation",
-        "school_class_or_occupation",
-        "Рід занять дорослого учасника",
-        "Рід занять",
-    ),
-    "previous_sport_experience": (
-        "adult_previous_sport_experience",
-        "previous_sport_experience",
-        "Попередній спортивний досвід дорослого учасника",
-        "Попередній спортивний досвід",
-    ),
     "training_goal": (
         "adult_training_goal",
         "training_goal",
@@ -930,8 +896,6 @@ def _registration_notes(
         _append_note(parts, "Мета тренувань", _first_value(row, _child_aliases(int(idx), "training_goal")) or _first_value(row, _ALIASES["training_goal"]))
         _append_note(parts, "Медичні примітки", _first_value(row, _child_aliases(int(idx), "medical_notes")) or _first_value(row, _ALIASES["medical_notes"]))
     else:
-        _append_note(parts, "Рід занять", _first_value(row, _ADULT_NOTE_ALIASES["school_class"]))
-        _append_note(parts, "Досвід спорту", _first_value(row, _ADULT_NOTE_ALIASES["previous_sport_experience"]))
         _append_note(parts, "Мета тренувань", _first_value(row, _ADULT_NOTE_ALIASES["training_goal"]))
         _append_note(parts, "Медичні примітки", _first_value(row, _ADULT_NOTE_ALIASES["medical_notes"]))
 
